@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Dependencies
+node_modules
+vendor
+
+# Environment
+.env.local
+.env.*.local
+
+# Logs
+storage/logs/*.log
+storage/logs/**/*.log
+
+# Cache
+storage/cache/*
+!storage/cache/.gitkeep
+
+# Uploads (manter estrutura mas não imagens)
+public/uploads/**/*.jpg
+public/uploads/**/*.jpeg
+public/uploads/**/*.png
+public/uploads/**/*.gif
+public/uploads/**/*.webp
+public/uploads/**/*.pdf
+
+# Documentation
+documentations/**/*.md
+docs/**/*.md
+
+# Tests
+tests
+phpunit.xml
+
+# Build artifacts
+*.zip
+*.tar.gz
+
+# Docker
+.dockerignore
+docker-compose.override.yml

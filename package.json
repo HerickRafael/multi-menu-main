@@ -1,0 +1,40 @@
+{
+  "name": "multi-menu",
+  "version": "1.0.0",
+  "description": "Sistema completo de cardápio digital com painel administrativo, integração WhatsApp, sistema de pedidos e gestão multi-tenant.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "build:css": "NODE_ENV=production npx tailwindcss -i src/tailwind.css -o public/assets/css/tailwind.min.css --minify",
+    "build:js": "node scripts/dev/minify-js.js",
+    "check:legacy": "bash scripts/dev/check-legacy-artifacts.sh",
+    "build": "npm run build:css && npm run build:js",
+    "watch:css": "npx tailwindcss -i src/tailwind.css -o public/assets/css/tailwind.min.css --watch",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:mobile": "playwright test --project='Mobile Chrome' --project='Mobile Safari'",
+    "test:e2e:report": "playwright show-report"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HerickRafael/multi-menu.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/HerickRafael/multi-menu/issues"
+  },
+  "homepage": "https://github.com/HerickRafael/multi-menu#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "autoprefixer": "^10.4.27",
+    "cssnano": "^7.1.4",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.19",
+    "terser": "^5.46.1"
+  }
+}

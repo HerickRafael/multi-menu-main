@@ -1,0 +1,93 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: documentations/Dockerfile
+    container_name: multi_menu_app
+    restart: unless-stopped
+    ports:
+      # Evita conflito com outro serviço na 8080 do host
+      - "8088:80"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_NAME=multi_menu
+      - DB_USER=multi_menu_user
+      - DB_PASS=multi_menu_password_2025
+      # local: evita exigência de JWT_SECRET/APP_KEY fortes do bootstrap de produção
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - BASE_URL=http://localhost:8088
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - SESSION_NAME=MULTIMENU_SESS
+      # Assistente IA (Super Admin). Opcional em desenvolvimento.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./public/assets:/var/www/html/public/assets
+      - ./public/uploads:/var/www/html/public/uploads
+      - ./storage/logs:/var/www/html/storage/logs
+      - ./storage/cache:/var/www/html/storage/cache
+      - ./app:/var/www/html/app
+    depends_on:
+      - db
+    networks:
+      - multi_menu_network
+
+  db:
+    image: mysql:8.0
+    container_name: multi_menu_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_2025
+      MYSQL_DATABASE: multi_menu
+      MYSQL_USER: multi_menu_user
+      MYSQL_PASSWORD: multi_menu_password_2025
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./database/multi_menu.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/multi_menu_update.sql:/docker-entrypoint-initdb.d/02-updates.sql
+    ports:
+      - "3307:3306"
+    networks:
+      - multi_menu_network
+    command: --default-authentication-plugin=mysql_native_password
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: multi_menu_phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: root_password_2025
+    ports:
+      - "8081:80"
+    depends_on:
+      - db
+    networks:
+      - multi_menu_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: multi_menu_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"
+    networks:
+      - multi_menu_network
+
+volumes:
+  db_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  multi_menu_network:
+    driver: bridge

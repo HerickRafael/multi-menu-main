@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS queue_jobs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NULL,
+    job_type VARCHAR(100) NOT NULL,
+    payload_json JSON NULL,
+    status ENUM('pending', 'processing', 'done', 'failed', 'retrying', 'dead') NOT NULL DEFAULT 'pending',
+    priority TINYINT NOT NULL DEFAULT 5,
+    attempts INT NOT NULL DEFAULT 0,
+    max_attempts INT NOT NULL DEFAULT 5,
+    last_error TEXT NULL,
+    available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reserved_at DATETIME NULL,
+    completed_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_queue_jobs_pick (status, priority, available_at),
+    INDEX idx_queue_jobs_company_time (company_id, created_at),
+    INDEX idx_queue_jobs_type_status (job_type, status),
+    CONSTRAINT fk_queue_jobs_company FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,0 +1,64 @@
+/**
+ * admin-theme.css — classes utilitárias que referenciam variáveis CSS do tema admin
+ *
+ * As variáveis (--admin-primary-*) são definidas inline no layout via <style>:root{...}
+ * porque dependem de configuração PHP por empresa. As classes aqui são estáticas
+ * e podem ser servidas como arquivo estático sem interpolação PHP.
+ */
+
+/* ---- Gradiente / background ---- */
+.admin-gradient-bg {
+  background-image: var(--admin-primary-gradient);
+  background-color: var(--admin-primary-color);
+}
+
+/* ---- Texto com gradiente ---- */
+.admin-gradient-text {
+  background-image: var(--admin-primary-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---- Utilitários de cor ---- */
+.admin-primary-text      { color: var(--admin-primary-color); }
+.admin-primary-underline { text-decoration-color: var(--admin-primary-color); }
+.admin-primary-bg        { background-color: var(--admin-primary-color); }
+.admin-primary-soft-bg   { background-color: var(--admin-primary-soft); }
+.admin-primary-soft-badge {
+  background-color: var(--admin-primary-soft);
+  color: var(--admin-primary-color);
+}
+.admin-primary-border    { border-color: var(--admin-primary-color); }
+
+/* ---- Sidebar — estado ativo ---- */
+.admin-sidebar-active {
+  background-image: var(--admin-primary-gradient);
+  background-color: var(--admin-primary-color);
+  color: #fff;
+  box-shadow: 0 4px 14px var(--admin-primary-ultrasoft);
+}
+
+/* ---- Sidebar — contexto / hover ---- */
+.admin-sidebar-context           { background-color: var(--admin-primary-ultrasoft); color: var(--admin-primary-color); }
+.admin-sidebar-item-hover:hover  { background-color: var(--admin-primary-ultrasoft); color: var(--admin-primary-color); }
+.admin-sidebar-item-hover:active { background-color: var(--admin-primary-light); }
+.admin-sidebar-item-hover:focus  { background-color: var(--admin-primary-ultrasoft); outline: none; }
+.admin-sidebar-contextual-active { background-color: var(--admin-primary-ultrasoft); color: var(--admin-primary-color); }
+.admin-sidebar-accent            { background-color: var(--admin-primary-color); }
+
+/* ---- Impressão ---- */
+.admin-print-only { display: none; }
+@media print {
+  .admin-print-only { display: block; }
+}
+
+/* ---- Animação de rotação para ícones de atualizar ---- */
+@keyframes spin-refresh {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.refresh-icon-spinning { animation: spin-refresh 1s linear infinite; }
+.refresh-icon-spin     { animation: spin-refresh 0.6s ease-in-out; }
+.loading-refresh-icon  { animation: spin-refresh 1s linear infinite; }
+button:active .refresh-icon { animation: spin-refresh 0.6s ease-in-out; }

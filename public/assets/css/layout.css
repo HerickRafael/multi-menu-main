@@ -1,0 +1,144 @@
+:root {
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+}
+body {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Footer menu com safe-area */
+nav.fixed.bottom-0 {
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  padding-bottom: calc(0.5rem + constant(safe-area-inset-bottom)) !important; /* iOS 11.0-11.2 */
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom)) !important; /* iOS 11.2+ */
+}
+
+/* ========================================
+ * MOBILE TOUCH OPTIMIZATIONS
+ * ======================================== */
+
+/* Remove 300ms tap delay */
+a, button, .product-card, .category-tab, [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent text selection on tap */
+.product-card, .category-tab {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Smooth momentum scrolling */
+.scroll-container, .product-list, .category-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Hover states apenas para dispositivos com mouse */
+@media (hover: none) and (pointer: coarse) {
+  .product-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  a:hover, button:hover {
+    opacity: 1 !important;
+  }
+}
+
+/* Active state para touch feedback */
+@media (hover: none) and (pointer: coarse) {
+  .product-card:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+  }
+  .category-tab:active, button:active, a:active {
+    opacity: 0.7;
+  }
+}
+
+/* Conexão lenta - reduzir animações */
+.slow-connection * {
+  animation-duration: 0s !important;
+  transition-duration: 0.1s !important;
+}
+
+/* iOS input zoom fix */
+@supports (-webkit-touch-callout: none) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* 100vh fix para iOS */
+.full-height {
+  height: 100vh;
+  height: calc(var(--vh, 1vh) * 100);
+}
+
+/* Lazy Loading - Placeholder Simples e Elegante */
+img.lazy-load {
+  background: #f3f4f6;
+  position: relative;
+}
+
+/* Ícone de imagem no centro */
+img.lazy-load::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23d1d5db' viewBox='0 0 24 24'%3E%3Cpath d='M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z'/%3E%3C/svg%3E") center/35% no-repeat;
+  opacity: 0.2;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Quando carregar, remover efeitos */
+img.lazy-load.loaded,
+img.lazy-load.error {
+  background: transparent;
+}
+
+img.lazy-load.loaded::before,
+img.lazy-load.error::before {
+  display: none;
+}
+
+/* Fade in suave quando carregar */
+img.loaded {
+  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn var(--animation-duration, 0.3s) ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  img.lazy-load {
+    background: #374151;
+  }
+
+  img.lazy-load::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%236b7280' viewBox='0 0 24 24'%3E%3Cpath d='M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z'/%3E%3C/svg%3E");
+    opacity: 0.15;
+  }
+}
+
+/* Exceções: containers que já tem fundo próprio */
+.ring img.lazy-load,
+.avatar img.lazy-load,
+.l-ava img.lazy-load {
+  background: transparent !important;
+}
+
+.ring img.lazy-load::before,
+.avatar img.lazy-load::before,
+.l-ava img.lazy-load::before {
+  display: none !important;
+}

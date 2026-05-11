@@ -1,0 +1,21 @@
+/* Guide Engine — Layout & Navigation
+ * Estrutura do grid, sidebar nav e CTA
+ */
+
+/* ─── Grid principal ─── */
+.gc-layout{display:grid;grid-template-columns:240px 1fr;gap:32px;align-items:start}
+.gc-main{min-width:0}
+.gc-spacer{height:80px}
+
+/* ─── Sidebar Nav ─── */
+.gc-nav{position:sticky;top:80px}
+.gc-nav a{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;font-size:13px;color:#64748b;text-decoration:none;transition:all .2s;border-left:3px solid transparent}
+.gc-nav a:hover{color:#334155;background:#f1f5f9}
+.gc-nav a.active{color:#fff;background:var(--admin-primary-color);border-left-color:var(--admin-primary-color);font-weight:600}
+.gc-nav a.active svg{color:#fff}
+.gc-nav-group{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;padding:16px 12px 4px}
+
+/* ─── CTA button ─── */
+.gc-cta{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--admin-primary-gradient,var(--admin-primary-color))!important;background-color:var(--admin-primary-color)!important;border-radius:12px;color:#fff!important;text-decoration:none;font-size:14px;font-weight:600;margin-top:16px;transition:opacity .2s}
+.gc-cta:hover{opacity:.9;color:#fff!important}
+.gc-cta svg{color:#fff!important}

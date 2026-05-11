@@ -1,0 +1,62 @@
+*{font-family:'Inter',system-ui,sans-serif}
+.gradient-hero{background:linear-gradient(135deg,#312e81 0%,#4f46e5 40%,#6366f1 70%,#818cf8 100%)}
+.gradient-cta{background:linear-gradient(135deg,#f59e0b 0%,#f97316 100%)}
+.gradient-card{background:linear-gradient(145deg,#f8fafc 0%,#eef2ff 100%)}
+.gradient-dark{background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#1e293b 100%)}
+.gradient-feature{background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 100%)}
+.glow{box-shadow:0 0 60px rgba(99,102,241,0.3)}
+.glow-sm{box-shadow:0 0 30px rgba(99,102,241,0.15)}
+.float-animation{animation:floatUp 6s ease-in-out infinite}
+.float-delay{animation:floatUp 6s ease-in-out 2s infinite}
+@keyframes floatUp{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes countUp{from{opacity:0;transform:scale(0.5)}to{opacity:1;transform:scale(1)}}
+.animate-fade-in{animation:fadeInUp .8s ease-out forwards}
+.animate-fade-in-delay{animation:fadeInUp .8s ease-out .2s forwards;opacity:0}
+.animate-fade-in-delay-2{animation:fadeInUp .8s ease-out .4s forwards;opacity:0}
+.animate-fade-in-delay-3{animation:fadeInUp .8s ease-out .6s forwards;opacity:0}
+.phone-mockup{border-radius:40px;box-shadow:0 25px 60px rgba(0,0,0,0.3),0 0 0 2px rgba(255,255,255,0.1);background:#000;padding:8px;overflow:hidden;position:relative}
+.phone-mockup::before{content:'';position:absolute;top:12px;left:50%;transform:translateX(-50%);width:80px;height:24px;background:#000;border-radius:12px;z-index:10}
+.phone-mockup-inner{border-radius:34px;overflow:hidden;background:#fff}
+.feature-icon{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
+.pricing-popular{position:relative;transform:scale(1.05);z-index:2}
+.blob-1{position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(99,102,241,0.15) 0%,transparent 70%);border-radius:50%;filter:blur(40px)}
+.blob-2{position:absolute;width:400px;height:400px;background:radial-gradient(circle,rgba(245,158,11,0.1) 0%,transparent 70%);border-radius:50%;filter:blur(40px)}
+.testimonial-card{backdrop-filter:blur(10px);background:rgba(255,255,255,0.8)}
+.counter[data-target]{font-variant-numeric:tabular-nums}
+.integration-badge{transition:all .3s ease}
+.integration-badge:hover{transform:translateY(-4px);box-shadow:0 12px 24px rgba(0,0,0,0.1)}
+.scroll-reveal{opacity:0;transform:translateY(30px);transition:all .6s ease-out}
+.scroll-reveal.visible{opacity:1;transform:translateY(0)}
+.nav-glass{backdrop-filter:blur(24px);background:rgba(255,255,255,0.85);border-bottom:1px solid rgba(0,0,0,0.06)}
+.nav-glass.scrolled{box-shadow:0 4px 30px rgba(0,0,0,0.08)}
+.feature-step::before{content:'';position:absolute;left:27px;top:60px;bottom:0;width:2px;background:linear-gradient(180deg,#6366f1 0%,#e0e7ff 100%)}
+.feature-step:last-child::before{display:none}
+.shimmer{background:linear-gradient(110deg,#e0e7ff 0%,#c7d2fe 20%,#e0e7ff 40%,#e0e7ff 100%);background-size:200% 100%;animation:shimmer 3s linear infinite}
+@keyframes shimmer{0%{background-position:200% 0}to{background-position:-200% 0}}
+.check-green{color:#22c55e}
+.module-card{transition:all .4s cubic-bezier(.4,0,.2,1)}
+.module-card:hover{transform:translateY(-8px);box-shadow:0 20px 50px rgba(0,0,0,0.12)}
+.tab-btn.active{background:#4f46e5;color:#fff;box-shadow:0 4px 15px rgba(79,70,229,0.3)}
+.tab-content{display:none}.tab-content.active{display:block;animation:fadeInUp .5s ease-out}
+.compare-full{background:#22c55e;color:#fff}.compare-partial{background:#f59e0b;color:#fff}.compare-none{background:#ef4444;color:#fff}
+.timeline-dot{width:20px;height:20px;border-radius:50%;border:4px solid #4f46e5;background:#fff;position:absolute;left:-10px;top:4px;z-index:2}
+.timeline-dot.done{background:#4f46e5}
+.timeline-line{position:absolute;left:0;top:0;bottom:0;width:2px;background:#e0e7ff}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .float-animation,
+  .float-delay,
+  .animate-fade-in,
+  .animate-fade-in-delay,
+  .animate-fade-in-delay-2,
+  .animate-fade-in-delay-3 {
+    animation: none;
+  }
+  .scroll-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

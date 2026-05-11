@@ -1,0 +1,260 @@
+/* ============================================================================
+   SKELETON LOADING SYSTEM - Estilos centralizados
+   ============================================================================ */
+
+/* Variáveis CSS para skeleton loading */
+:root {
+  --skeleton-base: #f1f5f9;
+  --skeleton-highlight: #e2e8f0;
+  --skeleton-duration: 1.5s;
+  --skeleton-wave-duration: 2s;
+  --skeleton-breathe-duration: 3s;
+}
+
+/* Skeleton loading básico com shimmer effect */
+.skeleton-basic {
+  background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%);
+  background-size: 200% 100%;
+  animation: shimmer var(--skeleton-duration) infinite;
+}
+
+/* Skeleton loading melhorado com efeitos profissionais */
+.skeleton-enhanced {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%);
+  background-size: 200% 100%;
+  animation: shimmer var(--skeleton-wave-duration) infinite, breathe var(--skeleton-breathe-duration) ease-in-out infinite alternate;
+}
+
+.skeleton-enhanced::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: loading-wave var(--skeleton-wave-duration) infinite;
+}
+
+/* Loading states melhorados com shimmer */
+.loading-shimmer {
+  background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%);
+  background-size: 200% 100%;
+  animation: shimmer var(--skeleton-duration) infinite;
+}
+
+/* Animações */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes loading-wave {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+@keyframes breathe {
+  0% { opacity: 0.6; }
+  100% { opacity: 0.8; }
+}
+
+/* Skeleton cards com diferentes delays para mais realismo */
+.skeleton-enhanced:nth-child(odd) {
+  animation-delay: 0.1s;
+}
+
+.skeleton-enhanced:nth-child(even) {
+  animation-delay: 0.3s;
+}
+
+/* Skeleton cards específicos para diferentes tipos */
+.skeleton-card {
+  background: #ffffff;
+  border-radius: 1rem;
+  border: 1px solid #e2e8f0;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.skeleton-stat-card {
+  background: #ffffff;
+  border-radius: 1rem;
+  border: 1px solid #e2e8f0;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s ease-in-out;
+}
+
+.skeleton-stat-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Elementos skeleton comuns */
+.skeleton-text {
+  height: 1rem;
+  border-radius: 0.25rem;
+  background: var(--skeleton-base);
+}
+
+.skeleton-text-sm {
+  height: 0.75rem;
+  border-radius: 0.25rem;
+  background: var(--skeleton-base);
+}
+
+.skeleton-text-lg {
+  height: 1.5rem;
+  border-radius: 0.25rem;
+  background: var(--skeleton-base);
+}
+
+.skeleton-button {
+  height: 2rem;
+  border-radius: 0.75rem;
+  background: var(--skeleton-base);
+}
+
+.skeleton-button-lg {
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background: var(--skeleton-base);
+}
+
+.skeleton-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--skeleton-base);
+}
+
+.skeleton-avatar-lg {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: var(--skeleton-base);
+}
+
+.skeleton-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.25rem;
+  background: var(--skeleton-base);
+}
+
+/* Skeleton containers */
+.skeleton-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.skeleton-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.skeleton-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Skeleton grid layouts */
+.skeleton-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+.skeleton-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .skeleton-grid-2,
+  .skeleton-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Estados de reveal */
+.skeleton-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.skeleton-reveal.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Micro-animações de bounce */
+.skeleton-bounce {
+  animation: skeleton-bounce 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes skeleton-bounce {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+
+/* Utilidades de animação */
+.animate-fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-slide-in-bottom {
+  animation: slideInFromBottom 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-scale-in {
+  animation: fadeInScale 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInFromBottom {
+  from { 
+    opacity: 0; 
+    transform: translateY(20px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+@keyframes fadeInScale {
+  from { 
+    opacity: 0; 
+    transform: scale(0.95); 
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1); 
+  }
+}
+
+/* Shake animation para erros */
+.shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+}

@@ -1,0 +1,125 @@
+# Docker Compose com Traefik - Multi Menu
+# Este arquivo assume que você já tem uma rede Traefik existente
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: documentations/Dockerfile
+    container_name: multi_menu_app
+    restart: unless-stopped
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=multimenu
+      - DB_USER=root
+      - DB_PASS=dbf50305959938e515b583917c05f61b
+      - APP_ENV=production
+      - BASE_URL=https://wollburger.online
+    volumes:
+      - ./public/uploads:/var/www/html/public/uploads
+      - ./storage/logs:/var/www/html/storage/logs
+      - ./storage/cache:/var/www/html/storage/cache
+      - ./app:/var/www/html/app
+    depends_on:
+      - db
+    networks:
+      - multi_menu_network
+      - traefik_network
+    labels:
+      # Habilitar Traefik
+      - "traefik.enable=true"
+      
+      # Rede que o Traefik deve usar
+      - "traefik.docker.network=traefik_network"
+      
+      # Configuração HTTP (porta 80)
+      - "traefik.http.routers.multimenu-http.rule=Host(`wollburger.online`) || Host(`www.wollburger.online`)"
+      - "traefik.http.routers.multimenu-http.entrypoints=web"
+      - "traefik.http.routers.multimenu-http.middlewares=redirect-to-https"
+      
+      # Configuração HTTPS (porta 443)
+      - "traefik.http.routers.multimenu-https.rule=Host(`wollburger.online`) || Host(`www.wollburger.online`)"
+      - "traefik.http.routers.multimenu-https.entrypoints=websecure"
+      - "traefik.http.routers.multimenu-https.tls=true"
+      - "traefik.http.routers.multimenu-https.tls.certresolver=letsencrypt"
+      
+      # Middleware: Redirecionar HTTP para HTTPS
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+      
+      # Middleware: Compressão (Gzip + Brotli) para melhor performance mobile
+      - "traefik.http.middlewares.compress-responses.compress=true"
+      - "traefik.http.routers.multimenu-https.middlewares=compress-responses"
+      
+      # Headers de Cache para assets estáticos
+      - "traefik.http.middlewares.cache-headers.headers.customresponseheaders.Cache-Control=public, max-age=31536000, immutable"
+      
+      # Porta interna do container
+      - "traefik.http.services.multimenu.loadbalancer.server.port=80"
+      
+      # ========= MOBILE ADMIN (m.wollburger.online) =========
+      # Configuração HTTP Mobile (redirecionamento)
+      - "traefik.http.routers.multimenu-mobile-http.rule=Host(`m.wollburger.online`)"
+      - "traefik.http.routers.multimenu-mobile-http.entrypoints=web"
+      - "traefik.http.routers.multimenu-mobile-http.middlewares=redirect-to-https"
+      
+      # Configuração HTTPS Mobile
+      - "traefik.http.routers.multimenu-mobile-https.rule=Host(`m.wollburger.online`)"
+      - "traefik.http.routers.multimenu-mobile-https.entrypoints=websecure"
+      - "traefik.http.routers.multimenu-mobile-https.tls=true"
+      - "traefik.http.routers.multimenu-mobile-https.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.multimenu-mobile-https.middlewares=compress-responses"
+      - "traefik.http.routers.multimenu-mobile-https.service=multimenu"
+
+  db:
+    image: mysql:8.0
+    container_name: multi_menu_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: dbf50305959938e515b583917c05f61b
+      MYSQL_DATABASE: multimenu
+      MYSQL_USER: root
+      MYSQL_PASSWORD: dbf50305959938e515b583917c05f61b
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./database/multi_menu.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/multi_menu_update.sql:/docker-entrypoint-initdb.d/02-updates.sql
+    networks:
+      - multi_menu_network
+    command: --default-authentication-plugin=mysql_native_password
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: multi_menu_phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: dbf50305959938e515b583917c05f61b
+    depends_on:
+      - db
+    networks:
+      - multi_menu_network
+      - traefik_network
+    labels:
+      # Habilitar Traefik para PHPMyAdmin (opcional)
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_network"
+      - "traefik.http.routers.multimenu-pma.rule=Host(`pma.wollburger.online`)"
+      - "traefik.http.routers.multimenu-pma.entrypoints=websecure"
+      - "traefik.http.routers.multimenu-pma.tls=true"
+      - "traefik.http.routers.multimenu-pma.tls.certresolver=letsencrypt"
+      - "traefik.http.services.multimenu-pma.loadbalancer.server.port=80"
+
+volumes:
+  db_data:
+    driver: local
+
+networks:
+  multi_menu_network:
+    driver: overlay
+  traefik_network:
+    external: true
+    name: traefik_network  # Ajuste para o nome real da sua rede Traefik

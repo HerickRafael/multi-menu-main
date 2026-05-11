@@ -1,0 +1,307 @@
+  :root{
+    --bg:#f3f4f6; --card:#fff; --txt:#0f172a; --muted:#6b7280;
+    --border:#e5e7eb; --accent:#f59e0b; --accent-active:#d97706; --accent-ink:#ffffff;
+    --ring:#fbbf24;
+    --hero-h: 360px;
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--txt);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;padding-bottom:env(safe-area-inset-bottom, 0px)}
+  .app{width:100%;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;background:var(--card);padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px));position:relative}
+  @media (min-width:768px){ .app{max-width:420px} }
+
+  /* ===== HERO ===== */
+  .hero-wrap{position:relative;height:var(--hero-h);overflow:hidden}
+  .nav-btn{position:absolute;top:12px;left:12px;z-index:3;width:36px;height:36px;border-radius:999px;border:1px solid var(--border);background:var(--card);display:grid;place-items:center;box-shadow:0 2px 6px rgba(0,0,0,.08);cursor:pointer;text-decoration:none;color:#111827}
+  .cart-btn{position:absolute;top:12px;right:12px;z-index:3;width:36px;height:36px;border-radius:999px;border:1px solid var(--border);background:var(--card);display:grid;place-items:center;box-shadow:0 2px 6px rgba(0,0,0,.08);cursor:pointer;text-decoration:none;color:#111827;transition:all .2s ease}
+  .cart-btn:hover{background:#F59E0B;border-color:#F59E0B;color:#fff;transform:scale(1.05)}
+  .cart-btn:active{transform:scale(0.95)}
+  .cart-badge{position:absolute;top:-4px;right:-4px;background:#EF4444;color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:999px;display:grid;place-items:center;padding:0 5px;border:2px solid var(--card);box-shadow:0 2px 4px rgba(0,0,0,.15)}
+  .hero{position:absolute;inset:0;background:radial-gradient(140% 90% at 75% 20%, #fff 0%, #eef2f5 55%, #e7ebee 100%);z-index:0;}
+  .hero-product-container{position:absolute;inset:0;z-index:1;}
+  .hero-product{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;filter:drop-shadow(0 18px 34px rgba(0,0,0,.25));pointer-events:none;user-select:none}
+  .hero-product-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(241,245,249,0.8);backdrop-filter:blur(2px)}
+  .hero-placeholder-icon{width:80px;height:80px;color:#94a3b8;opacity:0.7}
+
+  /* ===== CARD ===== */
+  .card{position:relative;z-index:1;background:var(--card);border-radius:26px 26px 0 0;margin-top:-18px;padding:26px 16px 8px;box-shadow:0 -1px 0 var(--border);display:flex;flex-direction:column;gap:10px}
+  .brand{display:flex;align-items:center;gap:8px;color:#374151;font-size:20px}
+  /* match product name to the visible 'Personalizar' label (size, weight, color) */
+  h1{margin:2px 0 0;font-size:18px;line-height:1.25;font-weight:700;color:#111;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;letter-spacing:normal}
+  /* ensure brand container doesn't force a smaller font on the h1 */
+  .brand h1{font-size:20px;font-weight:700;color:#111;margin:2px 0 0}
+  .price-row{display:flex;align-items:center;justify-content:space-between;margin-top:4px}
+  .price{display:flex;flex-direction:column;gap:4px}
+  .price-single{font-size:22px;font-weight:800}
+  .price-original{font-size:15px;font-weight:600;color:#9ca3af;text-decoration:line-through}
+  .price-current-row{display:flex;align-items:baseline;gap:10px}
+  .price-current{font-size:24px;font-weight:800}
+  .price-discount{font-size:16px;font-weight:700;color:#059669}
+  .stepper{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:999px;padding:6px 10px;min-width:104px;justify-content:space-between}
+  .st-btn{width:32px;height:32px;border-radius:999px;background:#fff;border:none;display:grid;place-items:center;cursor:pointer}
+  .st-btn svg{width:18px;height:18px}
+  .st-val{min-width:20px;text-align:center;font-weight:700}
+  .section h3{margin:8px 0 6px;color:var(--muted);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  .body{font-size:14px;color:#374151;line-height:1.5}
+
+  /* ===== PERSONALIZAR ===== */
+  .customize-wrap{background:var(--card)}
+  .customize{padding:25px 0 0 0}
+  .btn-outline{width:100%;background:#fff;color:#111;border:1px solid #d8d8d8;border-radius:12px;padding:18px;font-size:18px;font-weight:500;display:flex;align-items:center;justify-content:space-between;text-decoration:none}
+  .btn-outline:active{background:#f9f9f9}
+  .btn-outline .chev{display:grid;place-items:center}
+  .btn-outline .chev svg{width:22px;height:22px}
+
+  /* ===== COMBO ===== */
+  
+  .combo .group{transition:background-color 0.10s ease}
+  .combo h2{font-size:32px;line-height:1.1;margin:12px 0 8px;font-weight:800;letter-spacing:-0.5px}
+  .choice-row{display:flex;gap:18px;overflow-x:auto;padding:12px 12px 18px;scroll-snap-type:x mandatory}
+  .choice-row::-webkit-scrollbar{height:0}
+  .choice{width:128px;flex:0 0 auto;scroll-snap-align:start;text-align:center;position:relative}
+  .ring{width:100px;height:100px;border-radius:999px;border:4px solid var(--border);background:#fff;display:flex;align-items:center;justify-content:center;position:relative;margin:0 auto;overflow:hidden}
+  /* garante que a imagem preencha todo o círculo sem distorcer */
+  .ring img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    object-position:center;
+    display:block;
+  }
+  .mark{
+    position:absolute;
+    right:14px;
+    top:0;
+    width:28px;
+    height:28px;
+    background:var(--ring);
+    border-radius:999px;
+    display:none;
+    place-items:center;
+    z-index:10;
+    border:3px solid #fff;
+  }
+  .mark svg{
+    width:14px;
+    height:14px;
+    color:#111;
+  }
+  .choice.sel .ring{
+    border-color:var(--ring);
+  }
+  .choice.sel .mark{
+    display:grid;
+  }
+  .choice-name{margin-top:10px;font-weight:700;font-size:15px;color:#1f2937}
+  .choice-price{margin-top:4px;color:#374151;font-size:14px}
+  .choice-customize{display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:7px 18px;border:1px solid var(--border);border-radius:999px;font-size:13px;font-weight:600;color:#111827;text-decoration:none;background:#fff;transition:background .18s ease,color .18s ease,border-color .18s ease}
+  .choice-customize:hover{background:#111827;color:#fff}
+  .choice-customize:active{background:#0f172a;color:#fff;border-color:#0f172a}
+  .choice-customize.hidden{display:none}
+  
+  .ring:focus{outline:none}
+  .ring:focus-visible{outline:none;box-shadow:none}
+
+  /* remove blue focus/border rings from combo choices (browser default) - but NOT when selected */
+  button.ring, .choice:not(.sel) .ring {
+    border-color: var(--border) !important;
+    box-shadow: none !important;
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button.ring:focus, button.ring:focus-visible, .choice:not(.sel) .ring:focus, .choice:not(.sel) .ring:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  /* keep orange selection border when a choice is selected */
+  .choice.sel .ring, .choice.sel button.ring {
+    border-color: var(--ring) !important;
+    box-shadow: 0 0 0 8px rgba(251,191,36,0.08) !important;
+  }
+  
+  /* ensure mark visibility when choice is selected */
+  .choice.sel .mark {
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* ===== CROSS-SELL ===== */
+  .cross-sell-item {
+    cursor: pointer;
+  }
+  .cross-sell-item .ring {
+    cursor: pointer;
+    pointer-events: auto;
+  }
+
+  /* ===== FOOTER/CTA ===== */
+  .footer{
+    position:fixed;
+    bottom:0;
+    left:50%;
+    transform:translateX(-50%);
+    background:var(--card);
+    padding:12px 16px 18px;
+    padding-bottom:calc(18px + env(safe-area-inset-bottom, 0px));
+    border-top:1px solid var(--border);
+    box-shadow:0 -10px 40px rgba(0,0,0,.06);
+    width:100%;
+    max-width:100%;
+    z-index:60;
+    /* Suporte adicional para diferentes navegadores */
+    padding-bottom:calc(18px + constant(safe-area-inset-bottom)); /* iOS 11.0-11.2 */
+    padding-bottom:calc(18px + env(safe-area-inset-bottom)); /* iOS 11.2+ e outros */
+  }
+  .footer.has-closed-info{
+    padding:12px 16px 12px;
+    padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  @media (min-width:768px){ .footer{max-width:420px} }
+  .card{padding-bottom:calc(82px + env(safe-area-inset-bottom, 0px))}
+  .cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;border:none;border-radius:18px;padding:0 24px;background:var(--accent);color:var(--accent-ink);font-weight:800;font-size:16px;text-decoration:none;cursor:pointer;text-align:center;transition:all .2s ease;position:relative}
+  .cta:active{background:var(--accent-active)}
+  .cta[disabled]{opacity:.6;cursor:not-allowed}
+  .cta.closed{
+    background:linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    color:#fff;
+    cursor:not-allowed;
+    opacity:1;
+    box-shadow:0 4px 12px rgba(0,0,0,.15), inset 0 1px 0 rgba(255,255,255,.1);
+    border:2px solid #9ca3af;
+    position:relative;
+    overflow:hidden;
+  }
+  .cta.closed::before{
+    content:'';
+    position:absolute;
+    top:-50%;
+    left:-50%;
+    width:200%;
+    height:200%;
+    background:linear-gradient(45deg, transparent 30%, rgba(255,255,255,.1) 50%, transparent 70%);
+    animation:shine 3s ease-in-out infinite;
+  }
+  .cta.closed:active{background:linear-gradient(135deg, #6b7280 0%, #4b5563 100%)}
+  .cta.closed .lock-icon{
+    font-size:20px;
+    animation:shake 0.5s ease-in-out, pulse 2s ease-in-out infinite;
+    display:inline-block;
+    position:relative;
+    z-index:1;
+  }
+  .cta.closed span:not(.lock-icon){
+    position:relative;
+    z-index:1;
+  }
+  .closed-info{
+    font-size:11px;
+    font-weight:600;
+    color:#6b7280;
+    text-align:center;
+    margin-top:8px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+  }
+  .closed-info svg{
+    width:14px;
+    height:14px;
+    flex-shrink:0;
+  }
+  .closed-info strong{
+    color:#374151;
+    font-weight:800;
+    font-size:12px;
+  }
+  /* Modo de pausa programada */
+  .closed-info.pause-mode {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-top: 10px;
+    color: #92400e;
+  }
+  .closed-info.pause-mode svg {
+    width: 18px;
+    height: 18px;
+    color: #f59e0b;
+  }
+  .closed-info.pause-mode strong {
+    color: #92400e;
+    font-weight: 700;
+  }
+  .pause-info-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    text-align: left;
+  }
+  .pause-title {
+    font-weight: 700;
+    font-size: 12px;
+    color: #92400e;
+  }
+  .pause-reason {
+    font-size: 11px;
+    font-weight: 500;
+    color: #a16207;
+  }
+  .pause-reason strong {
+    font-weight: 700;
+    color: #92400e;
+  }
+  @keyframes shake {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-5deg); }
+    75% { transform: rotate(5deg); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(0.95); }
+  }
+  @keyframes shine {
+    0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+    100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+  }
+
+  /* Login modal layout: center and add side padding on small screens
+     Use :not(.hidden) so Tailwind's .hidden (display:none) still works */
+  .modal-top{z-index:200}
+  .modal-top:not(.hidden){display:grid;place-items:center;padding:20px}
+  .modal-top > div{width:100%;max-width:420px;margin:0}
+  @media(min-width:768px){
+    .modal-top:not(.hidden){padding:0}
+    .modal-top > div{margin-top:3rem}
+  }
+@keyframes highlight {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: rgba(147, 51, 234, 0.1); border-radius: 12px; }
+}
+
+/* Destaque visual ao tentar avançar sem preencher grupo obrigatório de combo */
+.highlight-missing {
+  animation: highlight 2s ease;
+  border-radius: 12px;
+}
+
+/* Botão personalizado */
+.choice-customize.customized {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+}
+
+.choice-customize.customized:hover {
+  background: #059669;
+  border-color: #059669;
+}
+
+.choice-customize.customized:active {
+  background: #047857;
+  border-color: #047857;
+}

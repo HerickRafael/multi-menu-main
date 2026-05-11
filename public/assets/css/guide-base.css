@@ -1,0 +1,27 @@
+/* Guide Engine — Sections & Callouts
+ * Blocos de conteúdo: cards, steps, tips, warns, annotations
+ */
+
+/* ─── Sections ─── */
+.gc-sec{scroll-margin-top:100px}
+.gc-card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:28px;margin-bottom:24px}
+.gc-card h2{font-size:20px;font-weight:700;color:#0f172a;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+.gc-card h2 svg{color:var(--admin-primary-color)}
+.gc-card h3{font-size:16px;font-weight:600;color:#1e293b;margin:20px 0 8px;display:flex;align-items:center;gap:8px}
+.gc-card p{font-size:14px;color:#475569;line-height:1.7;margin-bottom:12px}
+
+/* ─── Steps ─── */
+.gc-steps{list-style:none;padding:0;margin:16px 0;counter-reset:st}
+.gc-steps li{counter-increment:st;display:flex;gap:14px;padding:12px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#334155;line-height:1.6}
+.gc-steps li:last-child{border-bottom:none}
+.gc-steps li::before{content:counter(st);flex-shrink:0;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--admin-primary-gradient,var(--admin-primary-color));color:#fff;font-size:13px;font-weight:700;margin-top:1px}
+
+/* ─── Callouts ─── */
+.gc-tip{background:color-mix(in srgb,var(--admin-primary-color) 10%,white);border:1px solid color-mix(in srgb,var(--admin-primary-color) 30%,white);border-radius:12px;padding:14px 16px;margin:14px 0;display:flex;gap:10px;align-items:flex-start}
+.gc-tip svg{flex-shrink:0;color:var(--admin-primary-color);margin-top:2px}
+.gc-tip .t{font-size:13px;color:#334155;line-height:1.6}
+.gc-warn{background:linear-gradient(135deg,#fef3c7,#fde68a33);border:1px solid #fcd34d;border-radius:12px;padding:14px 16px;margin:14px 0;display:flex;gap:10px;align-items:flex-start}
+.gc-warn svg{flex-shrink:0;color:#d97706;margin-top:2px}
+.gc-warn .t{font-size:13px;color:#92400e;line-height:1.6}
+.gc-annot{display:flex;gap:8px;margin-top:10px;padding:10px 14px;background:color-mix(in srgb,var(--admin-primary-color) 8%,white);border:1px solid color-mix(in srgb,var(--admin-primary-color) 25%,white);border-radius:10px;font-size:12px;color:#334155;line-height:1.6}
+.gc-annot svg{flex-shrink:0;color:var(--admin-primary-color);margin-top:1px}

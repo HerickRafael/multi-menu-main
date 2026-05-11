@@ -1,0 +1,49 @@
+/vendor/
+/.env
+/.phpunit.result.cache
+/.phpunit.cache/
+/.php-cs-fixer.cache
+/var/cache/*
+!/var/cache/.gitignore
+/storage/logs/*.log
+
+/.htaccess
+/.env.production
+/.env.docker
+app/config/app.php 
+app/config/db.php
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Arquivos temporários de teste
+demo-*.html
+test-*.html
+
+# Arquivos de backup
+*.bak
+*.backup
+*.old
+*.tmp
+*~
+
+# Node modules e dependências
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Uploads e cache
+/public/uploads/*
+!/public/uploads/.htaccess
+!/public/uploads/.gitkeep
+/storage/*
+!/storage/.gitkeep
+
+# Playwright E2E artifacts
+/playwright-report/
+/test-results/
+/blob-report/

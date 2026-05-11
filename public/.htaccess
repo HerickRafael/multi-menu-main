@@ -1,0 +1,69 @@
+# multi-menu/public/.htaccess
+
+Options -Indexes
+
+<IfModule mod_setenvif.c>
+  SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=$1
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Preserva Authorization para middleware JWT no PHP.
+  RewriteCond %{HTTP:Authorization} ^(.+)$ [NC]
+  RewriteRule ^ - [E=HTTP_AUTHORIZATION:%1]
+
+  # Compatibilidade: rota antiga /super-admin -> rota canonical /superadmin
+  RewriteRule ^super-admin/?$ /superadmin/dashboard [R=302,L]
+  RewriteRule ^super-admin/login/?$ /superadmin/login [R=302,L]
+
+  # HTTPS atrás de proxy (Cloudflare / Tunnel)
+  RewriteCond %{HTTP:X-Forwarded-Proto} =https [OR]
+  RewriteCond %{HTTPS} =on
+  RewriteRule ^ - [E=IS_HTTPS:1]
+
+  # (Opcional) Forçar HTTPS – descomente se quiser:
+  # RewriteCond %{ENV:IS_HTTPS} !=1
+  # RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # Arquivo/pasta existe → serve direto (inclui assets do React build)
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # SPA fallback: /superadmin/* não-arquivo -> React index.html
+  RewriteCond %{REQUEST_URI} ^/superadmin
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^ /superadmin/index.html [L]
+
+  # Roteia para index.php (PHP app)
+  RewriteRule ^ index.php [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+  # Nunca cachear documentos HTML do Super Admin: evita shell antigo da SPA.
+  Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0" "expr=%{REQUEST_URI} =~ m#^/superadmin(?:/|$)# && %{REQUEST_URI} !~ m#\.(?:js|css|map|json|png|jpe?g|gif|svg|webp|ico|woff2?)$#"
+  Header always set Pragma "no-cache" "expr=%{REQUEST_URI} =~ m#^/superadmin(?:/|$)# && %{REQUEST_URI} !~ m#\.(?:js|css|map|json|png|jpe?g|gif|svg|webp|ico|woff2?)$#"
+  Header always set Expires "0" "expr=%{REQUEST_URI} =~ m#^/superadmin(?:/|$)# && %{REQUEST_URI} !~ m#\.(?:js|css|map|json|png|jpe?g|gif|svg|webp|ico|woff2?)$#"
+</IfModule>
+
+AddType image/svg+xml .svg .svgz
+AddType application/javascript .js
+AddType application/manifest+json .webmanifest
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/gif "access plus 30 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+  ExpiresByType font/woff2 "access plus 30 days"
+  ExpiresDefault "access plus 1 day"
+</IfModule>

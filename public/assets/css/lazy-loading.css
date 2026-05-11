@@ -1,0 +1,117 @@
+/**
+ * CSS para Sistema de Lazy Loading
+ * Funciona tanto para área pública quanto admin
+ */
+
+/* Estado inicial das imagens lazy */
+img.lazy-load {
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  background-color: #f3f4f6;
+  background-image: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 200% 100%;
+}
+
+/* Animação de shimmer enquanto carrega */
+img.lazy-loading {
+  opacity: 0.6;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Imagem carregada com sucesso */
+img.lazy-loaded {
+  opacity: 1;
+  background: transparent;
+  animation: none;
+}
+
+/* Imagem com erro de carregamento */
+img.lazy-error {
+  opacity: 0.5;
+  background: #fee;
+  animation: none;
+}
+
+/* Animação shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Para imagens que já têm src (não usar lazy loading) */
+img:not(.lazy-load) {
+  opacity: 1;
+}
+
+/* Melhora a experiência em conexões lentas */
+@media (prefers-reduced-motion: reduce) {
+  img.lazy-load,
+  img.lazy-loading,
+  img.lazy-loaded {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* Container opcional para skeleton loader */
+.lazy-container {
+  position: relative;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+
+.lazy-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  z-index: 1;
+}
+
+.lazy-container img.lazy-loaded + .lazy-placeholder,
+.lazy-container::before {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Placeholder para quando a imagem não carregar */
+.lazy-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40%;
+  height: 40%;
+  opacity: 0.3;
+  z-index: 2;
+}
+
+/* Variações de tamanho para diferentes contextos */
+.lazy-load.lazy-thumb {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+.lazy-load.lazy-card {
+  min-height: 96px;
+  min-width: 96px;
+}
+
+.lazy-load.lazy-banner {
+  min-height: 144px;
+  width: 100%;
+}
+
+.lazy-load.lazy-hero {
+  min-height: 300px;
+  width: 100%;
+}

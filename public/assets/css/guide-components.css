@@ -1,0 +1,33 @@
+/* Guide Engine — Form Replicas & Data Components
+ * Fieldsets, inputs, tags, tabelas, grids de tipo
+ */
+
+/* ─── Form replicas ─── */
+.gc-fieldset{border:1px solid #e2e8f0;border-radius:16px;padding:20px;box-shadow:0 1px 2px 0 rgb(0 0 0/.05);margin:16px 0}
+.gc-input{width:100%;border-radius:12px;border:1px solid #cbd5e1;background:#fff;padding:8px 12px;font-size:14px;color:#0f172a;box-sizing:border-box}
+.gc-input:disabled{background:#f8fafc;color:#94a3b8}
+.gc-select{width:100%;border-radius:12px;border:1px solid #cbd5e1;background:#fff;padding:8px 12px;font-size:14px;color:#0f172a;box-sizing:border-box;appearance:auto}
+.gc-textarea{width:100%;border-radius:12px;border:1px solid #cbd5e1;background:#fff;padding:8px 12px;font-size:14px;color:#0f172a;box-sizing:border-box;resize:vertical;font-family:inherit}
+.gc-textarea:disabled{color:#94a3b8}
+.gc-field{margin-bottom:12px}
+.gc-field:last-child{margin-bottom:0}
+.gc-label{display:block;font-size:14px;color:#475569;margin-bottom:4px}
+.gc-help{font-size:12px;color:#94a3b8;margin-top:4px}
+
+/* ─── Tags ─── */
+.gc-tag{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;margin-left:6px}
+.gc-tag-r{background:#fee2e2;color:#dc2626}
+.gc-tag-o{background:#f0fdf4;color:#16a34a}
+
+/* ─── Compare table ─── */
+.gc-cmp{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;margin:16px 0;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0}
+.gc-cmp th{background:#f8fafc;padding:10px 14px;text-align:left;font-weight:600;color:#475569;border-bottom:2px solid #e2e8f0}
+.gc-cmp td{padding:10px 14px;border-bottom:1px solid #f1f5f9;color:#334155}
+.gc-cmp tbody tr:last-child td{border-bottom:none}
+
+/* ─── Type grid ─── */
+.gc-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
+.gc-type-card{border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;text-align:center;transition:all .2s}
+.gc-type-card .tc-icon{font-size:28px;margin-bottom:6px}
+.gc-type-card .tc-name{font-size:13px;font-weight:700;color:#1e293b}
+.gc-type-card .tc-desc{font-size:11px;color:#64748b;margin-top:2px}

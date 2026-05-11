@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS webhook_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NULL,
+    source VARCHAR(80) NOT NULL DEFAULT 'unknown',
+    event_type VARCHAR(120) NOT NULL,
+    payload_json JSON NULL,
+    response_status INT NULL,
+    response_body TEXT NULL,
+    status ENUM('received', 'processed', 'failed', 'retrying', 'dropped') NOT NULL DEFAULT 'received',
+    retry_count INT NOT NULL DEFAULT 0,
+    last_error TEXT NULL,
+    next_retry_at DATETIME NULL,
+    processed_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_webhook_logs_status_retry (status, next_retry_at),
+    INDEX idx_webhook_logs_company_time (company_id, created_at),
+    INDEX idx_webhook_logs_source_event (source, event_type),
+    CONSTRAINT fk_webhook_logs_company FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

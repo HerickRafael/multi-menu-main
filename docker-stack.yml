@@ -1,0 +1,117 @@
+version: "3.7"
+
+# IMPORTANTE: Use sempre o mesmo nome de stack para evitar duplicação
+# Deploy: docker stack deploy -c docker-stack.yml multimenu
+# NÃO use: multi-menu, multi_menu ou outros nomes
+
+services:
+
+## --------------------------- MULTI MENU --------------------------- ##
+
+  multi_menu_app:
+    image: multi-menu-working:latest
+
+    volumes:
+      - multi_menu_uploads:/var/www/html/public/uploads
+      - multi_menu_logs:/var/www/html/storage/logs
+      - multi_menu_cache:/var/www/html/storage/cache
+
+    networks:
+      - rede
+
+    environment:
+      ## Configuração da aplicação
+      - APP_ENV=production
+      - BASE_URL=https://wollburger.online
+      
+      ## Dados do MySQL
+      - DB_HOST=85.31.231.130
+      - DB_PORT=3306
+      - DB_NAME=multimenu
+      - DB_USER=root
+      - DB_PASS=dbf50305959938e515b583917c05f61b
+      - DB_CHARSET=utf8mb4
+
+    # [FIX #9] Healthcheck real — Swarm e Traefik só roteiam tráfego após Apache/PHP estar responsivo
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/health-check.php"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+      # [FIX #9] start-first: novo container sobe antes do antigo derrubar = zero downtime
+      # rollback automático se novo container não ficar healthy
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 5s
+        monitor: 30s
+      rollback_config:
+        order: start-first
+        failure_action: pause
+      labels:
+        - traefik.enable=true
+        # [FIX #10] Watchtower: habilita monitoramento neste serviço
+        - com.centurylinklabs.watchtower.enable=true
+        # Router principal (desktop)
+        - traefik.http.routers.multi_menu.rule=Host(`wollburger.online`) || Host(`www.wollburger.online`)
+        - traefik.http.routers.multi_menu.entrypoints=web,websecure
+        - traefik.http.routers.multi_menu.tls.certresolver=letsencryptresolver
+        - traefik.http.services.multi_menu.loadbalancer.server.port=80
+        - traefik.http.routers.multi_menu.service=multi_menu
+        # Router mobile (m.wollburger.online)
+        - traefik.http.routers.multi_menu_mobile.rule=Host(`m.wollburger.online`)
+        - traefik.http.routers.multi_menu_mobile.entrypoints=web,websecure
+        - traefik.http.routers.multi_menu_mobile.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.multi_menu_mobile.service=multi_menu
+
+  # Watchtower - Auto-deploy quando houver nova imagem no GitHub
+  # [FIX #10] LABEL_ENABLE=true + label no app: Watchtower só monitora serviços explicitamente marcados
+  # O socket Docker é necessário para o Watchtower funcionar — mantenha replicas: 1 no manager
+  multi_menu_watchtower:
+    image: containrrr/watchtower
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - WATCHTOWER_LABEL_ENABLE=true   # apenas monitora containers com label watchtower.enable=true
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+
+## --------------------------- MULTI MENU --------------------------- ##
+
+volumes:
+  multi_menu_uploads:
+    external: true
+    name: multi_menu_uploads
+  multi_menu_logs:
+    external: true
+    name: multi_menu_logs
+  multi_menu_cache:
+    external: true
+    name: multi_menu_cache
+
+networks:
+  rede:
+    external: true
+    name: rede

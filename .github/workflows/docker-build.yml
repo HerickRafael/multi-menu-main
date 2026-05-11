@@ -1,0 +1,98 @@
+name: Build and Push Docker Image# Workflow para build e publicação automática da imagem Docker
+
+name: Docker Build and Push
+
+on:
+
+  push:on:
+
+    branches: [ main ]  push:
+
+  workflow_dispatch:    branches: [ main ]
+
+    tags:
+
+jobs:      - 'v*'
+
+  build:  pull_request:
+
+    runs-on: ubuntu-latest    branches: [ main ]
+
+    
+
+    steps:env:
+
+      - name: Checkout code  REGISTRY: ghcr.io
+
+        uses: actions/checkout@v3  IMAGE_NAME: ${{ github.repository }}
+
+      
+
+      - name: Set up Docker Buildxjobs:
+
+        uses: docker/setup-buildx-action@v2  build-and-push:
+
+          runs-on: ubuntu-latest
+
+      - name: Login to Docker Hub    permissions:
+
+        uses: docker/login-action@v2      contents: read
+
+        with:      packages: write
+
+          username: ${{ secrets.DOCKER_USERNAME }}
+
+          password: ${{ secrets.DOCKER_PASSWORD }}    steps:
+
+            - name: Checkout repository
+
+      - name: Build and push        uses: actions/checkout@v4
+
+        uses: docker/build-push-action@v4
+
+        with:      - name: Set up Docker Buildx
+
+          context: .        uses: docker/setup-buildx-action@v3
+
+          push: true
+
+          tags: |      - name: Log in to the Container registry
+
+            ${{ secrets.DOCKER_USERNAME }}/wollburger:latest        uses: docker/login-action@v3
+
+            ${{ secrets.DOCKER_USERNAME }}/wollburger:${{ github.sha }}        with:
+
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/wollburger:latest          registry: ${{ env.REGISTRY }}
+
+          cache-to: type=inline          username: ${{ github.actor }}
+
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            GITHUB_REPO=${{ github.repository }}
+            GITHUB_BRANCH=${{ github.ref_name }}
+
+      - name: Image digest
+        run: echo ${{ steps.meta.outputs.digest }}

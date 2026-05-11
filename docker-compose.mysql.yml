@@ -1,0 +1,25 @@
+version: "3.7"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_local
+    restart: unless-stopped
+    
+    ports:
+      - "3306:3306"
+    
+    environment:
+      - MYSQL_ROOT_PASSWORD=dbf50305959938e515b583917c05f61b
+      - MYSQL_DATABASE=multimenu
+      - MYSQL_CHARACTER_SET_SERVER=utf8mb4
+      - MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci
+    
+    volumes:
+      - mysql_data:/var/lib/mysql
+    
+    command: --default-authentication-plugin=mysql_native_password
+
+volumes:
+  mysql_data:
+    driver: local

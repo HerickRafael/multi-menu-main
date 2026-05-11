@@ -1,0 +1,124 @@
+{
+  "id": "/dashboard",
+  "name": "Multi Menu - Admin Mobile",
+  "short_name": "Admin",
+  "description": "Painel administrativo mobile do Multi Menu - Gerencie pedidos, produtos e configurações do seu restaurante",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#4361ee",
+  "background_color": "#ffffff",
+  "categories": ["business", "productivity", "food"],
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/assets/icons/mobile/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/mobile/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/mobile/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/mobile/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/mobile/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/mobile/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/icons/mobile/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/mobile/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Pedidos",
+      "short_name": "Pedidos",
+      "description": "Ver pedidos pendentes",
+      "url": "/orders",
+      "icons": [
+        {
+          "src": "/assets/icons/mobile/shortcut-orders.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "KDS",
+      "short_name": "KDS",
+      "description": "Tela de produção",
+      "url": "/kds",
+      "icons": [
+        {
+          "src": "/assets/icons/mobile/shortcut-kds.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Produtos",
+      "short_name": "Produtos",
+      "description": "Gerenciar produtos",
+      "url": "/products",
+      "icons": [
+        {
+          "src": "/assets/icons/mobile/shortcut-products.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/assets/screenshots/mobile-dashboard.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Dashboard do Admin Mobile"
+    },
+    {
+      "src": "/assets/screenshots/mobile-orders.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Lista de Pedidos"
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

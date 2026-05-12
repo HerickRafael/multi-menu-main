@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
 
+require_once __DIR__ . '/../modules/auth/MobileAdminGuard.php';
+require_once __DIR__ . '/../modules/orders/OrderListService.php';
+
 /**
  * MobileAdminOrdersController
  * 
@@ -13,35 +16,7 @@ class MobileAdminOrdersController extends Controller
 {
     private function guard(): array
     {
-        Auth::start();
-
-        $slug = $_SERVER['MOBILE_SLUG'] ?? 'wollburger';
-
-        if (!Auth::checkAdmin()) {
-            header('Location: /login');
-            exit;
-        }
-
-        $company = Company::findBySlug($slug);
-
-        if (!$company || empty($company['id'])) {
-            http_response_code(404);
-            echo 'Empresa inválida';
-            exit;
-        }
-
-        $u = Auth::user();
-        $isRoot = ($u['role'] === 'root');
-
-        if (!$isRoot && (int)$u['company_id'] !== (int)$company['id']) {
-            http_response_code(403);
-            echo 'Acesso negado';
-            exit;
-        }
-
-        $this->ensureCompanyContext((int)$company['id'], $slug);
-
-        return [$u, $company];
+        return MobileAdminGuard::requireCompanyAccess();
     }
 
     /**
@@ -56,32 +31,13 @@ class MobileAdminOrdersController extends Controller
         $status = $_GET['status'] ?? 'all';
         $page = max(1, (int)($_GET['page'] ?? 1));
         $limit = 20;
-        $offset = ($page - 1) * $limit;
 
-        // Busca pedidos
         $db = db();
-        if ($status === 'all') {
-            $orders = Order::listByCompany($db, $companyId, null, $limit, $offset);
-            $totalOrders = Order::countByCompany($db, $companyId);
-        } else {
-            $orders = Order::listByCompany($db, $companyId, $status, $limit, $offset);
-            $totalOrders = Order::countByCompanyAndStatus($db, $companyId, $status);
-        }
-
-        // Contagem por status para tabs (suporta ambos workflows)
-        $statusCounts = [
-            'all' => Order::countByCompany($db, $companyId),
-            // Workflow operacional (mobile/KDS)
-            'pending' => Order::countByCompanyAndStatus($db, $companyId, 'pending'),
-            'confirmed' => Order::countByCompanyAndStatus($db, $companyId, 'confirmed'),
-            'preparing' => Order::countByCompanyAndStatus($db, $companyId, 'preparing'),
-            'ready' => Order::countByCompanyAndStatus($db, $companyId, 'ready'),
-            'delivered' => Order::countByCompanyAndStatus($db, $companyId, 'delivered'),
-            // Workflow gerencial (desktop)
-            'completed' => Order::countByCompanyAndStatus($db, $companyId, 'completed'),
-        ];
-
-        $totalPages = ceil($totalOrders / $limit);
+        $listResult = OrderListService::listForMobile($db, $companyId, $status, $page, $limit);
+        $orders = $listResult['orders'];
+        $totalOrders = $listResult['totalOrders'];
+        $statusCounts = $listResult['statusCounts'];
+        $totalPages = $listResult['totalPages'];
 
         $pageTitle = 'Pedidos';
         $activeNav = 'orders';
@@ -114,7 +70,7 @@ class MobileAdminOrdersController extends Controller
             exit;
         }
 
-        $order = Order::find($orderId);
+        $order = Order::find($orderId, (int)$company['id']);
 
         if (!$order || (int)$order['company_id'] !== (int)$company['id']) {
             http_response_code(404);
@@ -123,7 +79,7 @@ class MobileAdminOrdersController extends Controller
         }
 
         // Busca itens do pedido
-        $items = Order::getItems($orderId);
+        $items = Order::getItems($orderId, (int)$company['id']);
 
         // Buscar histórico de eventos
         $db = db();
@@ -132,7 +88,7 @@ class MobileAdminOrdersController extends Controller
         // Busca dados do cliente
         $customer = null;
         if (!empty($order['customer_id'])) {
-            $customer = Customer::find((int)$order['customer_id']);
+            $customer = Customer::findByCompanyAndId((int)$company['id'], (int)$order['customer_id']);
         }
 
         $orderNumber = $order['order_number'] ?? $order['id'] ?? $orderId;
@@ -386,7 +342,7 @@ class MobileAdminOrdersController extends Controller
             return;
         }
 
-        $order = Order::find($orderId);
+        $order = Order::find($orderId, (int)$company['id']);
 
         if (!$order || (int)$order['company_id'] !== (int)$company['id']) {
             $this->jsonResponse(['success' => false, 'error' => 'Pedido não encontrado']);
@@ -825,7 +781,7 @@ class MobileAdminOrdersController extends Controller
         $db = db();
 
         if ($orderId) {
-            $order = Order::find($orderId);
+            $order = Order::find($orderId, (int)$company['id']);
             if ($order && (int)$order['company_id'] === $companyId) {
                 Order::delete($db, $orderId, $companyId);
                 $_SESSION['flash_success'] = 'Pedido excluído com sucesso!';

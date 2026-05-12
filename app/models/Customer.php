@@ -67,14 +67,25 @@ class Customer
         return $row ?: null;
     }
 
-    public static function findById(int $id): ?array
+    public static function findById(int $id, ?int $companyId = null): ?array
     {
-        $sql = 'SELECT * FROM customers WHERE id = :id LIMIT 1';
+        $sql = 'SELECT * FROM customers WHERE id = :id';
+        $params = [':id' => $id];
+        if ($companyId !== null) {
+            $sql .= ' AND company_id = :cid';
+            $params[':cid'] = $companyId;
+        }
+        $sql .= ' LIMIT 1';
         $st  = self::pdo()->prepare($sql);
-        $st->execute([':id' => $id]);
+        $st->execute($params);
         $row = $st->fetch();
 
         return $row ?: null;
+    }
+
+    public static function findByCompanyAndId(int $companyId, int $id): ?array
+    {
+        return self::findById($id, $companyId);
     }
 
     public static function insert(array $data): int

@@ -14,6 +14,9 @@ class ImagePipelineService
 {
     private ImageStorageService $storage;
     private array $stats = [];
+    private const REMOTE_MAX_BYTES = 10485760; // 10MB
+    private const REMOTE_CONNECT_TIMEOUT = 5;
+    private const REMOTE_TIMEOUT = 10;
 
     public function __construct()
     {
@@ -114,11 +117,33 @@ class ImagePipelineService
             mkdir($tempDir, 0755, true);
         }
 
-        $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+        $ext = strtolower(pathinfo((string)($file['name'] ?? ''), PATHINFO_EXTENSION));
+        if ($ext === '') {
+            $ext = 'bin';
+        }
         $tempPath = $tempDir . '/' . uniqid('img_', true) . '.' . $ext;
 
-        if (!move_uploaded_file($file['tmp_name'], $tempPath)) {
-            throw new \RuntimeException('Falha ao salvar arquivo temporário');
+        $source = (string)($file['tmp_name'] ?? '');
+        if ($source === '' || !is_file($source)) {
+            throw new \RuntimeException('Arquivo temporário inválido');
+        }
+
+        if (is_uploaded_file($source)) {
+            if (!move_uploaded_file($source, $tempPath)) {
+                throw new \RuntimeException('Falha ao salvar arquivo temporário');
+            }
+        } else {
+            $realSource = realpath($source);
+            $tempRoot = realpath(sys_get_temp_dir());
+            if ($realSource === false || $tempRoot === false || strpos($realSource, $tempRoot . DIRECTORY_SEPARATOR) !== 0) {
+                throw new \RuntimeException('Arquivo temporário inválido');
+            }
+            if (!@rename($realSource, $tempPath)) {
+                if (!@copy($realSource, $tempPath)) {
+                    throw new \RuntimeException('Falha ao salvar arquivo temporário');
+                }
+                @unlink($realSource);
+            }
         }
 
         return $tempPath;
@@ -212,20 +237,13 @@ class ImagePipelineService
      */
     public function processFromUrl(string $url, string $category, ?string $customName = null): array
     {
-        $tempPath = sys_get_temp_dir() . '/' . uniqid('img_url_', true) . '.jpg';
-
-        // Download
-        $imageData = file_get_contents($url);
-        if ($imageData === false) {
-            throw new \RuntimeException('Falha ao baixar imagem da URL');
-        }
-
-        file_put_contents($tempPath, $imageData);
+        $tempPath = sys_get_temp_dir() . '/' . uniqid('img_url_', true) . '.bin';
+        $this->downloadRemoteFile($url, $tempPath, self::REMOTE_MAX_BYTES);
 
         try {
             // Simular upload
             $file = [
-                'name' => basename($url),
+                'name' => basename((string)(parse_url($url, PHP_URL_PATH) ?? 'remote-image')),
                 'tmp_name' => $tempPath,
                 'size' => filesize($tempPath),
                 'error' => UPLOAD_ERR_OK
@@ -278,6 +296,122 @@ class ImagePipelineService
             'failed' => $failed,
             'results' => $results
         ];
+    }
+
+    private function downloadRemoteFile(string $url, string $targetPath, int $maxBytes): void
+    {
+        if (!function_exists('curl_init')) {
+            throw new \RuntimeException('cURL indisponível para download remoto');
+        }
+
+        $this->assertSafeRemoteUrl($url);
+
+        $fp = fopen($targetPath, 'wb');
+        if ($fp === false) {
+            throw new \RuntimeException('Falha ao preparar download remoto');
+        }
+
+        $downloaded = 0;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_FAILONERROR => true,
+            CURLOPT_CONNECTTIMEOUT => self::REMOTE_CONNECT_TIMEOUT,
+            CURLOPT_TIMEOUT => self::REMOTE_TIMEOUT,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_MAXREDIRS => 0,
+            CURLOPT_USERAGENT => 'MultiMenu-ImagePipeline/1.0',
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_WRITEFUNCTION => function ($ch, $data) use (&$downloaded, $maxBytes, $fp) {
+                $len = strlen($data);
+                $downloaded += $len;
+                if ($downloaded > $maxBytes) {
+                    return 0;
+                }
+                return fwrite($fp, $data);
+            },
+        ]);
+
+        $result = curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err = curl_error($ch);
+        curl_close($ch);
+        fclose($fp);
+
+        if ($result === false || $httpCode < 200 || $httpCode >= 300) {
+            @unlink($targetPath);
+            throw new \RuntimeException('Falha ao baixar imagem da URL: ' . $err);
+        }
+
+        if (!is_file($targetPath) || filesize($targetPath) <= 0) {
+            @unlink($targetPath);
+            throw new \RuntimeException('Arquivo remoto vazio');
+        }
+    }
+
+    private function assertSafeRemoteUrl(string $url): void
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            throw new \RuntimeException('URL inválida');
+        }
+
+        $scheme = strtolower((string)$parts['scheme']);
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            throw new \RuntimeException('Protocolo não permitido');
+        }
+
+        if (!empty($parts['user']) || !empty($parts['pass'])) {
+            throw new \RuntimeException('Credenciais embutidas não são permitidas');
+        }
+
+        $host = (string)$parts['host'];
+        $ips = $this->resolveHostIps($host);
+        if (!$ips) {
+            throw new \RuntimeException('Host inválido');
+        }
+
+        foreach ($ips as $ip) {
+            if (!$this->isPublicIp($ip)) {
+                throw new \RuntimeException('Host não permitido');
+            }
+        }
+    }
+
+    private function resolveHostIps(string $host): array
+    {
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            return [$host];
+        }
+
+        $ips = gethostbynamel($host);
+        if ($ips === false) {
+            $ips = [];
+        }
+
+        if (function_exists('dns_get_record')) {
+            $records = dns_get_record($host, DNS_AAAA);
+            if (is_array($records)) {
+                foreach ($records as $record) {
+                    if (!empty($record['ipv6'])) {
+                        $ips[] = $record['ipv6'];
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($ips));
+    }
+
+    private function isPublicIp(string $ip): bool
+    {
+        return (bool) filter_var(
+            $ip,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+        );
     }
 
     /**

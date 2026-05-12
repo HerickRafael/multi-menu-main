@@ -64,6 +64,8 @@ require_once APP_PATH . '/core/AuthCustomer.php';
 require_once APP_PATH . '/core/Router.php';
 require_once APP_PATH . '/core/ErrorHandler.php';
 
+ErrorHandler::register();
+
 // ============================================================================
 // 📦 MODELS - Modelos de dados
 // ============================================================================

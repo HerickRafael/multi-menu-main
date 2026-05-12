@@ -227,7 +227,7 @@ class ApiController extends Controller
 
         $this->loadCompany($slug);
 
-        $product = Product::find((int)$productId);
+        $product = Product::find((int)$productId, true, (int)$this->company['id']);
         
         if (!$product) {
             $this->sendError('Produto não encontrado', 404);

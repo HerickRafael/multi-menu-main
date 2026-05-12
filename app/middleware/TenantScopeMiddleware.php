@@ -4,13 +4,21 @@ declare(strict_types=1);
 
 class TenantScopeMiddleware
 {
-    public static function enforceRequestScope(string $param = 'company_id'): int
+    public static function enforceRequestScope(string $param = 'company_id', ?int $contextCompanyId = null): int
     {
-        $companyId = (int)($_GET[$param] ?? $_POST[$param] ?? 0);
+        $companyId = $contextCompanyId !== null ? (int)$contextCompanyId : 0;
+        $requested = (int)($_GET[$param] ?? $_POST[$param] ?? 0);
+
         if ($companyId < 1) {
             http_response_code(422);
-            exit('Escopo de tenant obrigatorio. Informe company_id.');
+            exit('Escopo de tenant obrigatorio. Contexto invalido.');
         }
+
+        if ($requested > 0 && $requested !== $companyId) {
+            http_response_code(403);
+            exit('Escopo de tenant invalido.');
+        }
+
         return $companyId;
     }
 

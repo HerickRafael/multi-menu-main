@@ -11,6 +11,8 @@ require_once __DIR__ . '/../app/core/SessionManager.php';
 require_once __DIR__ . '/../app/core/ErrorHandler.php';
 require_once __DIR__ . '/../app/services/SmartCache.php';
 
+ErrorHandler::register();
+
 $response = [
     'status' => 'healthy',
     'timestamp' => date('Y-m-d H:i:s'),

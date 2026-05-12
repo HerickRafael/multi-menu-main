@@ -97,7 +97,7 @@ class CustomerAuthController extends Controller
                 'updated_at'    => $now,
                 'last_login_at' => $now,
             ], $lgpdFields));
-            $customer = Customer::findById((int)$id);
+            $customer = Customer::findById((int)$id, (int)$company['id']);
 
             // Agenda cenário 1 imediatamente para reduzir o tempo entre cadastro e contato.
             try {
@@ -114,7 +114,7 @@ class CustomerAuthController extends Controller
                 'updated_at'    => $now,
                 'last_login_at' => $now,
             ], $lgpdFields));
-            $customer = Customer::findById((int)$customer['id']);
+            $customer = Customer::findById((int)$customer['id'], (int)$company['id']);
         }
 
         // Preservar carrinho antes de regenerar sessão

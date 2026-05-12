@@ -57,31 +57,13 @@ class AdminProductController extends Controller
 
             // armazenaremos a porcentagem bruta (ex: 15 = 15%) no campo promo_price
             return $promo;
+            require_once __DIR__ . '/../modules/auth/AdminGuard.php';
+            require_once __DIR__ . '/../modules/products/ProductImageService.php';
         }
 
         // modo 'fixed' (comportamento antigo): valor absoluto em moeda
         if (!is_numeric($raw)) {
-            return null;
-        }
-
-        $promo = (float)$raw;
-
-        if ($promo <= 0) {
-            return null;
-        }
-
-        $price = (float)$basePrice;
-
-        if ($price <= 0 || $promo >= $price) {
-            return null;
-        }
-
-        return $promo;
-    }
-
-    /** Protege rotas e valida empresa/usuário */
-    private function guard($slug)
-    {
+                    return AdminGuard::requireCompanyAccess($slug);
         Auth::start();
         $u = Auth::user();
 
@@ -89,60 +71,9 @@ class AdminProductController extends Controller
             header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/login'));
             exit;
         }
-
-        $company = Company::findBySlug($slug);
-
-        if (!$company) {
-            echo 'Empresa inválida';
-            exit;
-        }
-
-        if ($u['role'] !== 'root' && (int)$u['company_id'] !== (int)$company['id']) {
-            echo 'Acesso negado';
-            exit;
-        }
-
-        return [$u, $company];
-    }
-
-    /** Lista de produtos */
-    public function index($params)
-    {
-        [$u, $company] = $this->guard($params['slug']);
-        $error = $_SESSION['flash_error'] ?? null;
-        unset($_SESSION['flash_error']);
-
-        $cats  = Category::allByCompany((int)$company['id']);
-        $items = Product::listByCompany((int)$company['id'], $_GET['q'] ?? null, false, false);
-
-        return $this->view('admin/products/index', compact('company', 'cats', 'items', 'error'));
-    }
-
-    /** Form de criação */
-    public function create($params)
-    {
-        [$u, $company] = $this->guard($params['slug']);
-        $cats = Category::allByCompany((int)$company['id']);
-
-        $p = [
-          'id'          => null,
-          'name'        => '',
-          'description' => '',
-          'price'       => 0.0,
-          'promo_price' => null,
-          'sku'         => Product::nextSkuForCompany((int)$company['id']),
-          'sort_order'  => 0,
-          'active'      => 1,
-          'category_id' => null,
-          'image'       => null,
-        ];
-
-        $customization = ['enabled' => false, 'groups' => []];
-        $ingredients = Ingredient::allForCompany((int)$company['id']);
-        $simpleProducts = Product::simpleProductsForCompany((int)$company['id']);
-        $groups = [];
-        $custTemplates = CustomizationTemplate::listWithItemsForCompany((int)$company['id']);
-
+                    $result = ProductImageService::upload($file);
+                    $error = $result['error'];
+                    return $result['path'];
         return $this->view('admin/products/form', compact('company', 'cats', 'p', 'customization', 'ingredients', 'simpleProducts', 'groups', 'custTemplates'));
     }
 
@@ -360,7 +291,7 @@ class AdminProductController extends Controller
     {
         [$u, $company] = $this->guard($params['slug']);
         $cats = Category::allByCompany((int)$company['id']);
-        $p = Product::find((int)$params['id'], false);  // false = não aplicar taxa embutida no admin
+        $p = Product::find((int)$params['id'], false, (int)$company['id']);  // false = não aplicar taxa embutida no admin
 
         if (!$p) {
             echo 'Produto não encontrado.';
@@ -383,7 +314,7 @@ class AdminProductController extends Controller
     public function update($params)
     {
         [$u, $company] = $this->guard($params['slug']);
-        $p = Product::find((int)$params['id'], false);
+        $p = Product::find((int)$params['id'], false, (int)$company['id']);
 
         if (!$p) {
             echo 'Produto não encontrado.';

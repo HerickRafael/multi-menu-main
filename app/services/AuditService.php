@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Models\AuditLog;
-use App\Models\AdminImpersonation;
 
 /**
  * AuditService
@@ -31,7 +29,7 @@ class AuditService
      */
     public static function logStoreSuspend(int $super_admin_id, int $company_id, string $reason, array $old_data, array $new_data): bool
     {
-        return AuditLog::create(
+        return \AuditLog::create(
             super_admin_id: $super_admin_id,
             action: 'suspend',
             module: 'stores',
@@ -55,7 +53,7 @@ class AuditService
      */
     public static function logStoreActivate(int $super_admin_id, int $company_id, array $old_data, array $new_data): bool
     {
-        return AuditLog::create(
+        return \AuditLog::create(
             super_admin_id: $super_admin_id,
             action: 'activate',
             module: 'stores',
@@ -80,7 +78,7 @@ class AuditService
      */
     public static function logStoreMaintenance(int $super_admin_id, int $company_id, string $reason, array $old_data, array $new_data): bool
     {
-        return AuditLog::create(
+        return \AuditLog::create(
             super_admin_id: $super_admin_id,
             action: 'maintenance',
             module: 'stores',
@@ -105,7 +103,7 @@ class AuditService
      */
     public static function logStoreBlock(int $super_admin_id, int $company_id, string $reason, array $old_data, array $new_data): bool
     {
-        return AuditLog::create(
+        return \AuditLog::create(
             super_admin_id: $super_admin_id,
             action: 'block',
             module: 'stores',
@@ -129,7 +127,7 @@ class AuditService
      */
     public static function logStoreUpdate(int $super_admin_id, int $company_id, array $old_data, array $new_data): bool
     {
-        return AuditLog::create(
+        return \AuditLog::create(
             super_admin_id: $super_admin_id,
             action: 'update',
             module: 'stores',
@@ -153,7 +151,7 @@ class AuditService
      */
     public static function logImpersonationStart(int $super_admin_id, int $company_id, string $reason, string $role = 'owner'): bool
     {
-        return AuditLog::create(
+        return \AuditLog::create(
             super_admin_id: $super_admin_id,
             action: 'impersonate_start',
             module: 'impersonations',
@@ -174,7 +172,7 @@ class AuditService
      */
     public static function logImpersonationEnd(int $super_admin_id, int $company_id, int $actions_performed): bool
     {
-        return AuditLog::create(
+        return \AuditLog::create(
             super_admin_id: $super_admin_id,
             action: 'impersonate_end',
             module: 'impersonations',
@@ -210,7 +208,7 @@ class AuditService
         ?array $old_data = null,
         ?array $new_data = null
     ): bool {
-        return AuditLog::create(
+        return \AuditLog::create(
             super_admin_id: $super_admin_id,
             action: $action,
             module: $module,
@@ -239,7 +237,7 @@ class AuditService
             'date_from' => $date_from
         ];
         
-        $logs = AuditLog::search($filters, limit: 1000);
+        $logs = \AuditLog::search($filters, limit: 1000);
         
         // Resumir por ação
         $actions = array_count_values(array_column($logs, 'action'));
@@ -269,7 +267,7 @@ class AuditService
             'date_from' => $date_from
         ];
         
-        $logs = AuditLog::search($filters, limit: 1000);
+        $logs = \AuditLog::search($filters, limit: 1000);
         
         // Resumir por ação
         $actions = array_count_values(array_column($logs, 'action'));

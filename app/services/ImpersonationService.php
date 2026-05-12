@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Models\AdminImpersonation;
-use App\Models\Company;
-use App\Models\User;
 
 /**
  * ImpersonationService
@@ -35,7 +32,7 @@ class ImpersonationService
     {
         try {
             // Validar que super admin existe e é root
-            $super_admin = User::find($super_admin_id);
+            $super_admin = \User::find($super_admin_id);
             if (!$super_admin || $super_admin['role'] !== 'root') {
                 return [
                     'success' => false,
@@ -44,7 +41,7 @@ class ImpersonationService
             }
 
             // Validar que loja existe
-            $company = Company::find($company_id);
+            $company = \Company::find($company_id);
             if (!$company) {
                 return [
                     'success' => false,
@@ -53,7 +50,7 @@ class ImpersonationService
             }
 
             // Validar que super admin não está já impersonando
-            $already_impersonating = AdminImpersonation::getActiveByAdmin($super_admin_id);
+            $already_impersonating = \AdminImpersonation::getActiveByAdmin($super_admin_id);
             if ($already_impersonating) {
                 return [
                     'success' => false,
@@ -62,7 +59,7 @@ class ImpersonationService
             }
 
             // Criar registro de impersonação
-            $impersonation = AdminImpersonation::start($super_admin_id, $company_id, $reason, $role);
+            $impersonation = \AdminImpersonation::start($super_admin_id, $company_id, $reason, $role);
             if (!$impersonation) {
                 return [
                     'success' => false,
@@ -99,7 +96,7 @@ class ImpersonationService
     {
         try {
             // Encontrar impersonação ativa
-            $impersonation = AdminImpersonation::getBySessionToken($session_token);
+            $impersonation = \AdminImpersonation::getBySessionToken($session_token);
             if (!$impersonation) {
                 return [
                     'success' => false,
@@ -108,7 +105,7 @@ class ImpersonationService
             }
 
             // Encerrar
-            $success = AdminImpersonation::end($impersonation['id'], $final_note);
+            $success = \AdminImpersonation::end($impersonation['id'], $final_note);
             if (!$success) {
                 return [
                     'success' => false,
@@ -144,7 +141,7 @@ class ImpersonationService
      */
     public static function validate(string $session_token): ?array
     {
-        return AdminImpersonation::getBySessionToken($session_token);
+        return \AdminImpersonation::getBySessionToken($session_token);
     }
 
     /**
@@ -155,14 +152,14 @@ class ImpersonationService
      */
     public static function getActive(int $super_admin_id): ?array
     {
-        $impersonation = AdminImpersonation::getActiveByAdmin($super_admin_id);
+        $impersonation = \AdminImpersonation::getActiveByAdmin($super_admin_id);
         
         if (!$impersonation) {
             return null;
         }
 
         // Enriquecer com dados da loja
-        $company = Company::find($impersonation['company_id']);
+        $company = \Company::find($impersonation['company_id']);
         
         return [
             'id' => $impersonation['id'],
@@ -185,7 +182,7 @@ class ImpersonationService
      */
     public static function recordAction(int $impersonation_id): bool
     {
-        return AdminImpersonation::incrementActionCount($impersonation_id);
+        return \AdminImpersonation::incrementActionCount($impersonation_id);
     }
 
     /**
@@ -200,11 +197,11 @@ class ImpersonationService
     {
         $offset = ($page - 1) * $per_page;
         
-        $impersonations = AdminImpersonation::getByAdmin($super_admin_id, $per_page, $offset);
+        $impersonations = \AdminImpersonation::getByAdmin($super_admin_id, $per_page, $offset);
         
         // Enriquecer com nomes de lojas
         foreach ($impersonations as &$imp) {
-            $company = Company::find($imp['company_id']);
+                        $company = \Company::find($imp['company_id']);
             $imp['company_name'] = $company['name'] ?? 'Unknown';
             $imp['is_active'] = $imp['ended_at'] === null;
         }
@@ -223,7 +220,7 @@ class ImpersonationService
      */
     public static function getStats(): array
     {
-        return AdminImpersonation::getStats();
+        return \AdminImpersonation::getStats();
     }
 
     /**
@@ -235,7 +232,7 @@ class ImpersonationService
      */
     public static function getCompanyHistory(int $company_id, int $limit = 50): array
     {
-        return AdminImpersonation::getByCompany($company_id, $limit);
+        return \AdminImpersonation::getByCompany($company_id, $limit);
     }
 
     /**
@@ -246,6 +243,6 @@ class ImpersonationService
      */
     public static function isImpersonating(int $super_admin_id): bool
     {
-        return AdminImpersonation::getActiveByAdmin($super_admin_id) !== null;
+        return \AdminImpersonation::getActiveByAdmin($super_admin_id) !== null;
     }
 }

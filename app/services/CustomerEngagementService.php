@@ -418,7 +418,7 @@ class CustomerEngagementService
         try {
             $this->discoverAndSaveLidMapping($phone, $config['instance_name']);
         } catch (\Throwable $e) {
-            error_log("[CustomerEngagement] LID discovery falhou para {$phone}, envio não afetado: " . $e->getMessage());
+            error_log("[CustomerEngagement] LID discovery falhou; envio nao afetado: " . $e->getMessage());
         }
         
         // Scenario1 (lead quente): agendar para AGORA
@@ -740,7 +740,7 @@ class CustomerEngagementService
                     $config['instance_name'],
                     (int)$item['customer_id']
                 )) {
-                    error_log("[CustomerEngagement] Cliente {$item['customer_phone']} teve interação WhatsApp recente - cancelando envio automático");
+                    error_log("[CustomerEngagement] Interacao WhatsApp recente detectada - cancelando envio automatico");
                     $this->updateQueueStatus((int)$item['id'], 'cancelled', null, 'Interação WhatsApp detectada');
                     $results['skipped']++;
                     continue;
@@ -770,7 +770,7 @@ class CustomerEngagementService
             
             // HUMAN TAKEOVER CHECK — não enviar engajamento se humano está atendendo
             if ($this->isHumanTakeoverActive($item['company_id'], $item['customer_phone'])) {
-                error_log("[CustomerEngagement] Takeover humano ativo para {$item['customer_phone']} — engajamento cancelado");
+                error_log("[CustomerEngagement] Takeover humano ativo - engajamento cancelado");
                 $this->updateQueueStatus((int)$item['id'], 'cancelled', null, 'Atendimento humano ativo');
                 $results['skipped']++;
                 continue;
@@ -948,10 +948,9 @@ class CustomerEngagementService
             $localMessage = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($localMessage) {
-                error_log("[CustomerEngagement] Cliente {$phone} mandou mensagem WhatsApp (via webhook). " .
+                error_log("[CustomerEngagement] Interacao WhatsApp recebida (webhook). " .
                     "Cadastro: " . date('Y-m-d H:i:s', $customerCreatedAt + 120) . 
-                    ", Mensagem: " . date('Y-m-d H:i:s', $localMessage['message_timestamp']) .
-                    " - \"" . substr($localMessage['message_text'] ?? '', 0, 30) . "\"");
+                    ", Mensagem: " . date('Y-m-d H:i:s', $localMessage['message_timestamp']));
                 return true;
             }
             
@@ -975,7 +974,7 @@ class CustomerEngagementService
         $company = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$company || empty($company['evolution_server_url']) || empty($company['evolution_api_key'])) {
-            error_log("[CustomerEngagement] Cliente {$phone} SEM interação (webhook vazio, API não configurada).");
+            error_log("[CustomerEngagement] Sem interacao (webhook vazio, API nao configurada).");
             return false;
         }
         
@@ -985,7 +984,7 @@ class CustomerEngagementService
         foreach ($phoneVariations as $phoneVariation) {
             $remoteJid = $phoneVariation . '@s.whatsapp.net';
             
-            error_log("[CustomerEngagement] Verificando interação via API para: {$remoteJid}");
+            error_log("[CustomerEngagement] Verificando interacao via API.");
             
             $url = $server . '/chat/findMessages/' . $instanceName;
             
@@ -1035,7 +1034,7 @@ class CustomerEngagementService
                     $messageTimestamp = $message['messageTimestamp'] ?? 0;
                     
                     if ($messageTimestamp >= $customerCreatedAt && $messageTimestamp <= $now) {
-                        error_log("[CustomerEngagement] Cliente {$phone} mandou mensagem WhatsApp (via API). " .
+                        error_log("[CustomerEngagement] Interacao WhatsApp recebida (API). " .
                             "Cadastro: " . date('Y-m-d H:i:s', $customerCreatedAt + 120) . 
                             ", Mensagem: " . date('Y-m-d H:i:s', $messageTimestamp));
                         return true;
@@ -1044,7 +1043,7 @@ class CustomerEngagementService
             }
         }
         
-        error_log("[CustomerEngagement] Cliente {$phone} SEM interação WhatsApp no período. Pode enviar mensagem.");
+        error_log("[CustomerEngagement] Sem interacao WhatsApp no periodo. Pode enviar mensagem.");
         return false;
     }
     
@@ -1148,7 +1147,7 @@ class CustomerEngagementService
                 // Detectar rate limit real (429 da API ou rate limit interno)
                 $isRateLimited = $httpCode === 429 || str_starts_with($error, 'rate_limit_per_');
                 if ($isRateLimited) {
-                    error_log("[CustomerEngagement] Rate limit atingido para {$phone}: {$error}");
+                    error_log("[CustomerEngagement] Rate limit atingido ao enviar mensagem.");
                     return 'rate_limited';
                 }
                 
@@ -1156,15 +1155,15 @@ class CustomerEngagementService
                 $isPermanent = ($httpCode >= 400 && $httpCode < 500)
                     || in_array($error, ['missing_whatsapp_config', 'invalid_provider_config', 'human_takeover_active'], true);
                 if ($isPermanent) {
-                    error_log("[CustomerEngagement] Erro permanente para {$phone}: {$error} (HTTP {$httpCode})");
+                    error_log("[CustomerEngagement] Erro permanente no envio (HTTP {$httpCode}).");
                     return 'permanent_error';
                 }
                 
-                error_log("[CustomerEngagement] Erro temporário ao enviar mensagem {$index}: {$error}");
+                error_log("[CustomerEngagement] Erro temporario ao enviar mensagem {$index}.");
                 return false;
             }
             
-            error_log("[CustomerEngagement] Mensagem {$index} enviada para {$phone} (msgId={$result['message_id']})");
+            error_log("[CustomerEngagement] Mensagem {$index} enviada (msgId={$result['message_id']})");
         }
         
         return true;
@@ -1350,7 +1349,7 @@ class CustomerEngagementService
             }
             
             if (!$profilePicId) {
-                error_log("[CustomerEngagement] Não encontrou profilePicUrl para {$phone}");
+                error_log("[CustomerEngagement] Nao encontrou profilePicUrl.");
                 return;
             }
             
@@ -1389,12 +1388,12 @@ class CustomerEngagementService
                     
                     // Salvar mapeamento
                     $this->saveLidMapping($lid, $cleanPhone, $instanceName);
-                    error_log("[CustomerEngagement] Mapeamento LID descoberto: {$lid} -> {$cleanPhone}");
+                    error_log("[CustomerEngagement] Mapeamento LID descoberto.");
                     return;
                 }
             }
             
-            error_log("[CustomerEngagement] Não encontrou LID para {$phone}");
+            error_log("[CustomerEngagement] Nao encontrou LID.");
             
         } catch (Exception $e) {
             error_log("[CustomerEngagement] Erro ao descobrir LID: " . $e->getMessage());
@@ -1447,7 +1446,7 @@ class CustomerEngagementService
     {
         // Guard: não mapear para o número da própria instância
         if ($this->isInstanceOwnerNumber($phone, $instanceName)) {
-            error_log("[CustomerEngagement] REJEITADO: Não salvando mapeamento LID {$lid} -> {$phone} (é o número da instância)");
+            error_log("[CustomerEngagement] REJEITADO: Nao salvando mapeamento LID (numero da instancia).");
             return;
         }
         
@@ -1487,7 +1486,7 @@ class CustomerEngagementService
             ");
             $stmt->execute([$lid, $contactId, $phone, $instanceName, $this->companyId]);
 
-            error_log("[CustomerEngagement] LID_MAP: {$lid} -> {$phone} (contact_id={$contactId}, confidence=LOW, source=manual, company={$this->companyId})");
+            error_log("[CustomerEngagement] LID_MAP registrado (contact_id={$contactId}, confidence=LOW, source=manual, company={$this->companyId}).");
         } catch (PDOException $e) {
             error_log("[CustomerEngagement] Erro ao salvar mapeamento LID: " . $e->getMessage());
         }

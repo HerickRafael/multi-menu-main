@@ -1218,13 +1218,19 @@ class Order
     }
 
     /**
-     * Busca pedido simples por ID (sem verificar company_id)
+     * Busca pedido simples por ID (opcionalmente filtrado por company_id)
      */
-    public static function find(int $orderId): ?array
+    public static function find(int $orderId, ?int $companyId = null): ?array
     {
         $db = db();
-        $st = $db->prepare('SELECT * FROM orders WHERE id = ?');
-        $st->execute([$orderId]);
+        $sql = 'SELECT * FROM orders WHERE id = ?';
+        $params = [$orderId];
+        if ($companyId !== null) {
+            $sql .= ' AND company_id = ?';
+            $params[] = $companyId;
+        }
+        $st = $db->prepare($sql);
+        $st->execute($params);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }
@@ -1232,16 +1238,29 @@ class Order
     /**
      * Busca itens de um pedido
      */
-    public static function getItems(int $orderId): array
+    public static function getItems(int $orderId, ?int $companyId = null): array
     {
         $db = db();
-        $sql = 'SELECT oi.*, p.name as product_name, p.image as product_image
-                FROM order_items oi
-                LEFT JOIN products p ON oi.product_id = p.id
-                WHERE oi.order_id = ?
-                ORDER BY oi.id ASC';
+        $params = [$orderId];
+
+        if ($companyId !== null) {
+            $sql = 'SELECT oi.*, p.name as product_name, p.image as product_image
+                    FROM order_items oi
+                    INNER JOIN orders o ON o.id = oi.order_id
+                    LEFT JOIN products p ON oi.product_id = p.id
+                    WHERE oi.order_id = ? AND o.company_id = ?
+                    ORDER BY oi.id ASC';
+            $params[] = $companyId;
+        } else {
+            $sql = 'SELECT oi.*, p.name as product_name, p.image as product_image
+                    FROM order_items oi
+                    LEFT JOIN products p ON oi.product_id = p.id
+                    WHERE oi.order_id = ?
+                    ORDER BY oi.id ASC';
+        }
+
         $st = $db->prepare($sql);
-        $st->execute([$orderId]);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

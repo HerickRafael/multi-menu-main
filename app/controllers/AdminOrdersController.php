@@ -6,6 +6,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../bootstrap.php';
 
 // Serviços específicos do controller
+require_once __DIR__ . '/../modules/auth/AdminGuard.php';
+require_once __DIR__ . '/../modules/orders/OrderListService.php';
+require_once __DIR__ . '/../modules/orders/OrderDetailsService.php';
 require_once __DIR__ . '/../services/OrderNotificationService.php';
 require_once __DIR__ . '/../services/ThermalReceipt.php';
 
@@ -14,27 +17,7 @@ class AdminOrdersController extends Controller
     /** Valida sessão, empresa e retorna [$u, $company] */
     private function guard(string $slug): array
     {
-        Auth::start();
-        $u = Auth::user();
-
-        if (!$u) {
-            header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/login'));
-            exit;
-        }
-
-        $company = Company::findBySlug($slug);
-
-        if (!$company) {
-            echo 'Empresa inválida';
-            exit;
-        }
-
-        if ($u['role'] !== 'root' && (int)$u['company_id'] !== (int)$company['id']) {
-            echo 'Acesso negado';
-            exit;
-        }
-
-        return [$u, $company];
+        return AdminGuard::requireCompanyAccess($slug);
     }
 
     public function index($params)
@@ -43,30 +26,19 @@ class AdminOrdersController extends Controller
         [$u, $company] = $this->guard($slug);
         $db = $this->db();
 
-        $status = $_GET['status'] ?? null;
-        $status = $status === '' ? null : $status;
-        
-        // Filtro por origem (manual, website, ifood)
-        $source = $_GET['source'] ?? null;
-        $source = $source === '' ? null : $source;
-        
-        // Busca por texto (nome, telefone, ID)
-        $search = $_GET['q'] ?? null;
-        $search = $search === '' ? null : $search;
-        
-        // Paginação
-        $page = max(1, (int)($_GET['page'] ?? 1));
-        $perPage = (int)($_GET['per_page'] ?? 10);
-        $allowedPerPage = [10, 25, 50, 100];
-        if (!in_array($perPage, $allowedPerPage)) {
-            $perPage = 10;
-        }
-        
-        $offset = ($page - 1) * $perPage;
-        $totalOrders = Order::countByCompany($db, (int)$company['id'], $status, $search, $source);
-        $totalPages = max(1, (int)ceil($totalOrders / $perPage));
-        
-        $orders = Order::listByCompany($db, (int)$company['id'], $status, $perPage, $offset, $search, $source);
+        $result = OrderListService::listForCompany($db, (int)$company['id'], [
+            'status' => $_GET['status'] ?? null,
+            'source' => $_GET['source'] ?? null,
+            'search' => $_GET['q'] ?? null,
+            'page' => (int)($_GET['page'] ?? 1),
+            'per_page' => (int)($_GET['per_page'] ?? 10),
+        ]);
+
+        $orders = $result['orders'];
+        $status = $result['filters']['status'];
+        $source = $result['filters']['source'];
+        $search = $result['filters']['search'];
+        $pagination = $result['pagination'];
 
         return $this->view('admin/orders/index', [
             'orders'      => $orders,
@@ -75,12 +47,7 @@ class AdminOrdersController extends Controller
             'search'      => $search,
             'company'     => $company,
             'activeSlug'  => $company['slug'],
-            'pagination'  => [
-                'page'       => $page,
-                'perPage'    => $perPage,
-                'total'      => $totalOrders,
-                'totalPages' => $totalPages,
-            ],
+            'pagination'  => $pagination,
         ]);
     }
 
@@ -91,44 +58,22 @@ class AdminOrdersController extends Controller
         $db = $this->db();
 
         $orderId = (int)($_GET['id'] ?? 0);
-        $order = Order::findWithItems($db, $orderId, (int)$company['id']);
+        $details = OrderDetailsService::loadAdminDetails($db, (int)$company['id'], $orderId);
 
-        if (!$order) {
+        if (!$details) {
             http_response_code(404);
             echo 'Pedido não encontrado';
 
             return;
         }
 
-        // Carregar dados adicionais do iFood se for pedido de origem iFood
-        $ifoodData = null;
-        if (($order['source'] ?? '') === 'ifood' && !empty($order['ifood_order_id'])) {
-            $stIfood = $db->prepare('SELECT * FROM ifood_orders WHERE ifood_order_id = ? AND company_id = ?');
-            $stIfood->execute([$order['ifood_order_id'], (int)$company['id']]);
-            $ifoodData = $stIfood->fetch(\PDO::FETCH_ASSOC);
-        }
-
-        // Buscar dados do método de pagamento para pedidos manuais/website
-        $paymentMethodName         = null;
-        $paymentMethodType         = null;
-        $paymentMethodMeta         = null;
-        $paymentMethodInstructions = null;
-        if (!empty($order['payment_method_id'])) {
-            $stPm = $db->prepare('SELECT name, type, meta, instructions FROM payment_methods WHERE id = ? AND company_id = ?');
-            $stPm->execute([(int)$order['payment_method_id'], (int)$company['id']]);
-            $pmRow = $stPm->fetch(\PDO::FETCH_ASSOC);
-            if ($pmRow) {
-                $paymentMethodName         = $pmRow['name'] ?? null;
-                $paymentMethodType         = $pmRow['type'] ?? null;
-                $paymentMethodInstructions = $pmRow['instructions'] ?? null;
-                $rawMeta = $pmRow['meta'] ?? null;
-                if ($rawMeta) {
-                    $paymentMethodMeta = is_string($rawMeta) ? json_decode($rawMeta, true) : $rawMeta;
-                }
-            }
-        }
-
-        $orderEvents = Order::eventsForOrder($db, (int)$company['id'], $orderId, 50);
+        $order = $details['order'];
+        $ifoodData = $details['ifoodData'];
+        $paymentMethodName = $details['paymentMethodName'];
+        $paymentMethodType = $details['paymentMethodType'];
+        $paymentMethodMeta = $details['paymentMethodMeta'];
+        $paymentMethodInstructions = $details['paymentMethodInstructions'];
+        $orderEvents = $details['orderEvents'];
 
         return $this->view('admin/orders/show', [
             'order'                     => $order,

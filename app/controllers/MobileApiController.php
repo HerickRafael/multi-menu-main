@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../modules/auth/MobileAdminGuard.php';
 
 /**
  * MobileApiController
@@ -13,28 +14,7 @@ class MobileApiController extends Controller
 {
     private function guard(): array
     {
-        Auth::start();
-
-        $slug = $_SERVER['MOBILE_SLUG'] ?? 'wollburger';
-
-        if (!Auth::checkAdmin()) {
-            $this->jsonError('Não autorizado', 401);
-        }
-
-        $company = Company::findBySlug($slug);
-
-        if (!$company || empty($company['id'])) {
-            $this->jsonError('Empresa inválida', 404);
-        }
-
-        $u = Auth::user();
-        $isRoot = ($u['role'] === 'root');
-
-        if (!$isRoot && (int)$u['company_id'] !== (int)$company['id']) {
-            $this->jsonError('Acesso negado', 403);
-        }
-
-        return [$u, $company];
+        return MobileAdminGuard::requireCompanyAccess();
     }
 
     /**

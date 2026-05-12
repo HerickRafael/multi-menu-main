@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 // 🚀 Bootstrap centralizado
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../modules/auth/CustomerGuard.php';
 
 class PublicOrderController extends Controller
 {
@@ -15,22 +16,9 @@ class PublicOrderController extends Controller
     {
         $slug = $params['slug'] ?? null;
         $id   = isset($params['id']) ? (int)$params['id'] : 0;
-
-        // Empresa
-        $company = Company::findBySlug($slug);
-
-        if (!$company || (int)($company['active'] ?? 0) !== 1) {
-            http_response_code(404);
-            echo 'Empresa não encontrada';
-            return;
-        }
-
-        // Verificar autenticação do cliente
-        $customer = AuthCustomer::current($slug);
-        if (!$customer) {
-            header('Location: ' . base_url($slug . '?login=1'));
-            exit;
-        }
+        $guard = CustomerGuard::requireCustomer((string)$slug);
+        $company = $guard['company'];
+        $customer = $guard['customer'];
 
         // Buscar pedido
         $db = $this->db();
@@ -69,22 +57,9 @@ class PublicOrderController extends Controller
     {
         $slug = $params['slug'] ?? null;
         $id   = isset($params['id']) ? (int)$params['id'] : 0;
-
-        // Empresa
-        $company = Company::findBySlug($slug);
-
-        if (!$company || (int)($company['active'] ?? 0) !== 1) {
-            http_response_code(404);
-            echo 'Empresa não encontrada';
-            return;
-        }
-
-        // Verificar autenticação do cliente
-        $customer = AuthCustomer::current($slug);
-        if (!$customer) {
-            header('Location: ' . base_url($slug . '?login=1'));
-            exit;
-        }
+        $guard = CustomerGuard::requireCustomer((string)$slug);
+        $company = $guard['company'];
+        $customer = $guard['customer'];
 
         $db = $this->db();
 

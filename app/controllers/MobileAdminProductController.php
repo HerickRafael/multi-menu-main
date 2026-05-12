@@ -243,7 +243,7 @@ class MobileAdminProductController extends Controller
         $companyId = (int)$company['id'];
         $id = (int)($params['id'] ?? 0);
         
-        $product = Product::find($id, false);
+        $product = Product::find($id, false, $companyId);
         if (!$product || (int)$product['company_id'] !== $companyId) {
             header('Location: /products');
             exit;
@@ -284,7 +284,7 @@ class MobileAdminProductController extends Controller
         $companyId = (int)$company['id'];
         $id = (int)($params['id'] ?? 0);
         
-        $product = Product::find($id);
+        $product = Product::find($id, true, $companyId);
         if (!$product || (int)$product['company_id'] !== $companyId) {
             header('Location: /products');
             exit;
@@ -358,7 +358,7 @@ class MobileAdminProductController extends Controller
         [$user, $company, $slug] = $this->guard();
         $id = (int)($params['id'] ?? 0);
         
-        $product = Product::find($id);
+        $product = Product::find($id, true, $companyId);
         if (!$product || (int)$product['company_id'] !== (int)$company['id']) {
             $this->jsonResponse(['success' => false, 'message' => 'Produto não encontrado']);
             return;
@@ -391,7 +391,7 @@ class MobileAdminProductController extends Controller
         [$user, $company, $slug] = $this->guard();
         $id = (int)($params['id'] ?? 0);
         
-        $product = Product::find($id);
+        $product = Product::find($id, true, $companyId);
         if (!$product || (int)$product['company_id'] !== (int)$company['id']) {
             $_SESSION['flash_error'] = 'Produto não encontrado';
             header('Location: /products');

@@ -396,9 +396,7 @@ class IFoodService
         }
         
         // Get next order_number
-        $stmt = $this->db->prepare("SELECT COALESCE(MAX(order_number), 0) + 1 FROM orders WHERE company_id = :cid");
-        $stmt->execute(['cid' => $this->companyId]);
-        $nextOrderNumber = (int) $stmt->fetchColumn();
+        $nextOrderNumber = \Order::getNextOrderNumber($this->db, $this->companyId);
         
         $ifoodOrderId = $orderDetails['id'] ?? null;
         

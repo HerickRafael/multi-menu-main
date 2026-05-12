@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 // 🚀 Bootstrap centralizado
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../modules/auth/AdminGuard.php';
 
 class AdminDashboardController extends Controller
 {
@@ -13,37 +14,7 @@ class AdminDashboardController extends Controller
      */
     private function guard(string $slug): array
     {
-        Auth::start();
-
-        // precisa estar logado (admin)
-        if (!Auth::checkAdmin()) {
-            header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/login'));
-            exit;
-        }
-
-        // empresa pelo slug
-        $company = Company::findBySlug($slug);
-
-        if (!$company || empty($company['id'])) {
-            http_response_code(404);
-            echo 'Empresa inválida';
-            exit;
-        }
-
-        // autorização: root pode tudo; demais só a própria empresa
-        $u = Auth::user();
-        $isRoot = ($u['role'] === 'root');
-
-        if (!$isRoot && (int)$u['company_id'] !== (int)$company['id']) {
-            http_response_code(403);
-            echo 'Acesso negado';
-            exit;
-        }
-
-        // garante que o contexto ativo siga o slug acessado
-        $this->ensureCompanyContext((int)$company['id'], $slug);
-
-        return [ $u, $company ];
+        return AdminGuard::requireCompanyAccess($slug);
     }
 
     /** GET /admin/{slug}/dashboard */

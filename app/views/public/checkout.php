@@ -10,6 +10,7 @@ $cities          = is_array($cities ?? null) ? $cities : [];
 $zonesByCity     = is_array($zonesByCity ?? null) ? $zonesByCity : [];
 $paymentMethods  = is_array($paymentMethods ?? null) ? $paymentMethods : [];
 $customerData    = is_array($customer ?? null) ? $customer : [];
+$checkoutTotals  = is_array($checkoutTotals ?? null) ? $checkoutTotals : [];
 
 $slug      = isset($slug) ? (string)$slug : (string)($company['slug'] ?? '');
 $slugClean = trim($slug, '/');
@@ -20,41 +21,20 @@ $subtotal        = (float)($totals['subtotal'] ?? 0.0);
 $deliveryFee     = (float)($totals['delivery'] ?? 0.0);
 $loyaltyDiscount = (float)($totals['loyalty_discount'] ?? 0.0);
 
-$couponCode = '';
-$couponPercentage = 0.0;
-if (!empty($_SESSION['couponCode'])) {
-    $couponCode = $_SESSION['couponCode'];
-    $couponPercentage = (float)($_SESSION['couponDiscount'] ?? 0);
-}
+$couponCode = isset($couponCode) ? (string)$couponCode : '';
+$couponPercentage = isset($couponPercentage) ? (float)$couponPercentage : 0.0;
 
 $selectedCityId    = isset($selectedCityId) ? (int)$selectedCityId : (int)($address['city_id'] ?? 0);
 $selectedZoneId    = isset($selectedZoneId) ? (int)$selectedZoneId : (int)($address['zone_id'] ?? 0);
 $selectedPaymentId = isset($selectedPaymentId) ? (int)$selectedPaymentId : (int)($address['payment_method_id'] ?? 0);
+$zonesPresent = isset($zonesPresent) ? (bool)$zonesPresent : false;
 
-$zonesPresent = false;
-
-foreach ($zonesByCity as $cityZones) {
-    if (!empty($cityZones)) {
-        $zonesPresent = true;
-        break;
-    }
-}
-
-require_once __DIR__ . '/../../services/OrderCalculatorService.php';
-$calc = OrderCalculatorService::computeCheckoutTotals([
-    'subtotal' => $subtotal,
-    'delivery_fee' => $deliveryFee,
-    'loyalty_discount' => $loyaltyDiscount,
-    'coupon_percentage' => $couponPercentage,
-    'selected_zone_id' => $selectedZoneId,
-    'zones_present' => $zonesPresent,
-]);
-$couponDiscount = $calc['couponDiscount'];
-$deliveryDiscountApplied = $calc['deliveryDiscountApplied'];
-$remainingLoyaltyDiscount = $calc['remainingLoyaltyDiscount'];
-$finalDeliveryFee = $calc['finalDeliveryFee'];
-$total = $calc['total'];
-$deliveryLabel = $calc['deliveryLabel'];
+$couponDiscount = (float)($checkoutTotals['coupon_discount'] ?? 0.0);
+$deliveryDiscountApplied = (float)($checkoutTotals['delivery_discount_applied'] ?? 0.0);
+$remainingLoyaltyDiscount = (float)($checkoutTotals['remaining_loyalty_discount'] ?? 0.0);
+$finalDeliveryFee = (float)($checkoutTotals['final_delivery_fee'] ?? $deliveryFee);
+$total = (float)($checkoutTotals['total'] ?? ($subtotal + $deliveryFee - $loyaltyDiscount));
+$deliveryLabel = (string)($checkoutTotals['delivery_label'] ?? '');
 
 $cardBrandMapping = function_exists('payment_card_brand_filenames')
     ? payment_card_brand_filenames()

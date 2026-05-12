@@ -17,6 +17,7 @@ require_once __DIR__ . '/../models/ProductCustomization.php';
 require_once __DIR__ . '/../models/DeliveryCity.php';
 require_once __DIR__ . '/../models/DeliveryZone.php';
 require_once __DIR__ . '/../services/OrderNotificationService.php';
+require_once __DIR__ . '/../modules/checkout/CheckoutTotalsService.php';
 require_once __DIR__ . '/../helpers/OrderItemData.php';
 require_once __DIR__ . '/../helpers/CheckoutSuccessOrder.php';
 require_once __DIR__ . '/../helpers/CheckoutSuccessMessageBuilder.php';
@@ -388,7 +389,7 @@ class PublicCartController extends Controller
                 continue;
             }
 
-            $product = Product::find($productId);
+            $product = Product::find($productId, true, (int)$company['id']);
 
             if (!$product || (int)($product['company_id'] ?? 0) !== (int)($company['id'] ?? 0)) {
                 continue;
@@ -1295,6 +1296,33 @@ class PublicCartController extends Controller
         $flash = $_SESSION['checkout_flash'] ?? null;
         unset($_SESSION['checkout_flash']);
 
+        $zonesPresent = false;
+        foreach ($zonesByCity as $cityZones) {
+            if (!empty($cityZones)) {
+                $zonesPresent = true;
+                break;
+            }
+        }
+
+        $couponCode = !empty($_SESSION['couponCode']) ? (string)$_SESSION['couponCode'] : '';
+        $couponPercentage = !empty($_SESSION['couponCode']) ? (float)($_SESSION['couponDiscount'] ?? 0) : 0.0;
+        $calc = CheckoutTotalsService::compute([
+            'subtotal' => $subtotal,
+            'delivery_fee' => $deliveryFee,
+            'loyalty_discount' => $loyaltyDiscount,
+            'coupon_percentage' => $couponPercentage,
+            'selected_zone_id' => $selectedZoneId,
+            'zones_present' => $zonesPresent,
+        ]);
+        $checkoutTotals = [
+            'coupon_discount' => $calc['couponDiscount'],
+            'delivery_discount_applied' => $calc['deliveryDiscountApplied'],
+            'remaining_loyalty_discount' => $calc['remainingLoyaltyDiscount'],
+            'final_delivery_fee' => $calc['finalDeliveryFee'],
+            'total' => $calc['total'],
+            'delivery_label' => $calc['deliveryLabel'],
+        ];
+
         return $this->view('public/checkout', [
             'company'           => $company,
             'items'             => $items,
@@ -1314,6 +1342,10 @@ class PublicCartController extends Controller
             'selectedZoneId'    => 0, // Sempre 0 - usuário deve selecionar
             'paymentMethods'    => $paymentMethods,
             'selectedPaymentId' => $selectedPaymentId,
+            'couponCode'        => $couponCode,
+            'couponPercentage'  => $couponPercentage,
+            'zonesPresent'      => $zonesPresent,
+            'checkoutTotals'    => $checkoutTotals,
             'flash'             => $flash,
         ]);
     }
@@ -1969,8 +2001,8 @@ class PublicCartController extends Controller
                     'loyalty_discount' => $loyaltyDiscount,
                     'payment_method' => $paymentMethod ? $paymentMethod['name'] : 'Não informado',
                     'payment_type' => $paymentMethod ? ($paymentMethod['type'] ?? '') : '',
-                    'items' => array_map(function($item) use ($db) {
-                        $product = Product::find($item['product']['id'] ?? 0);
+                    'items' => array_map(function($item) use ($db, $companyId) {
+                        $product = Product::find($item['product']['id'] ?? 0, true, (int)$companyId);
                         $itemData = [
                             'name' => $product['name'] ?? 'Produto',
                             'quantity' => $item['qty'] ?? 1,
@@ -2227,20 +2259,6 @@ class PublicCartController extends Controller
     /** POST /{slug}/cart/add */
     public function add($params)
     {
-        // DEBUG TEMPORÁRIO: Salvar POST em arquivo
-        $debugLog = '/tmp/cart_add_debug.log';
-        $debugData = date('Y-m-d H:i:s') . "\n";
-        $debugData .= "REQUEST_URI: " . ($_SERVER['REQUEST_URI'] ?? 'N/A') . "\n";
-        $debugData .= "POST keys: " . implode(', ', array_keys($_POST)) . "\n";
-        $debugData .= "product_id: " . ($_POST['product_id'] ?? 'N/A') . "\n";
-        $debugData .= "cross_sell presente: " . (isset($_POST['cross_sell']) ? 'SIM' : 'NÃO') . "\n";
-        if (isset($_POST['cross_sell'])) {
-            $debugData .= "cross_sell tipo: " . gettype($_POST['cross_sell']) . "\n";
-            $debugData .= "cross_sell valor: " . print_r($_POST['cross_sell'], true) . "\n";
-        }
-        $debugData .= "========================\n\n";
-        @file_put_contents($debugLog, $debugData, FILE_APPEND);
-        
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             http_response_code(405);
             echo 'Método não permitido';
@@ -2269,7 +2287,7 @@ class PublicCartController extends Controller
             exit;
         }
 
-        $product = $productId > 0 ? Product::find($productId) : null;
+        $product = $productId > 0 ? Product::find($productId, true, (int)$company['id']) : null;
 
         if (!$product || (int)($product['company_id'] ?? 0) !== (int)$company['id'] || (int)($product['active'] ?? 0) !== 1) {
             http_response_code(404);
@@ -2329,29 +2347,18 @@ class PublicCartController extends Controller
                     if ($defaultQty > 1) {
                         $unitCustomizations = [];
                         
-                        error_log("DEBUG ADD: sid=$sid, defaultQty=$defaultQty, productId=$productId");
-                        
-                        // DEBUG: Listar todas as chaves de personalização salvas
-                        $allCustoms = $this->storage->getCustomizations();
-                        error_log("DEBUG ADD: Todas as customizations salvas: " . json_encode(array_keys($allCustoms)));
-                        
                         for ($unit = 1; $unit <= $defaultQty; $unit++) {
                             $unitSnap = $this->snapshotCustomization($sid, $productId, $unit);
-                            
-                            error_log("DEBUG ADD: unit=$unit, snapshotCustomization retornou: " . ($unitSnap !== null ? json_encode($unitSnap) : 'NULL'));
                             
                             if ($unitSnap !== null) {
                                 $unitCustomizations[$unit] = $unitSnap;
                             } else {
                                 // Se não tem personalização para esta unidade, usar a padrão
                                 $unitCustomizations[$unit] = $this->defaultCustomizationSnapshot($sid);
-                                error_log("DEBUG ADD: unit=$unit usando default: " . json_encode($unitCustomizations[$unit]));
                             }
                             // Limpar personalização da unidade
                             $this->storage->removeCustomization($sid, null, $productId, $unit);
                         }
-                        
-                        error_log("DEBUG ADD: unitCustomizations finais: " . json_encode($unitCustomizations));
                         
                         // Armazenar a estrutura com unit_customizations (sempre terá valores)
                         $componentCustomizations[$sid] = [
@@ -2376,11 +2383,6 @@ class PublicCartController extends Controller
             }
         }
 
-        // Debug: log do que está chegando
-        error_log('DEBUG ADD TO CART: product_id=' . $productId);
-        error_log('DEBUG ADD TO CART: POST cross_sell=' . print_r($_POST['cross_sell'] ?? 'NENHUM', true));
-        error_log('DEBUG ADD TO CART: GET cross_sell=' . print_r($_GET['cross_sell'] ?? 'NENHUM', true));
-
         // iOS FIX: Aceitar cross_sell tanto do POST quanto do GET (action modificado)
         $crossSellFromPost = isset($_POST['cross_sell']) && is_array($_POST['cross_sell']) ? $_POST['cross_sell'] : [];
         $crossSellFromGet = isset($_GET['cross_sell']) && is_array($_GET['cross_sell']) ? $_GET['cross_sell'] : [];
@@ -2389,7 +2391,6 @@ class PublicCartController extends Controller
         $crossSellData = !empty($crossSellFromPost) ? $crossSellFromPost : $crossSellFromGet;
         
         if (!empty($crossSellData)) {
-            error_log('DEBUG ADD TO CART: cross_sell merged (total ' . count($crossSellData) . '): ' . json_encode($crossSellData));
             // Atualizar $_POST para que o restante do código funcione normalmente
             $_POST['cross_sell'] = $crossSellData;
         }
@@ -2420,14 +2421,10 @@ class PublicCartController extends Controller
                 }
 
                 if ($recovered) {
-                    error_log('DEBUG ADD TO CART: recovered cross_sells from session customizations: ' . json_encode($recovered));
                     // Inserir no _POST para que o restante do fluxo processe normalmente
                     $_POST['cross_sell'] = $recovered;
-                } else {
-                    error_log('DEBUG ADD TO CART: no cross_sells recovered from session customizations');
                 }
             } catch (Throwable $e) {
-                error_log('DEBUG ADD TO CART: error while recovering cross_sells: ' . $e->getMessage());
             }
         }
         
@@ -2437,8 +2434,6 @@ class PublicCartController extends Controller
         if (!is_array($cartRef)) {
             $cartRef = [];
         }
-        
-        error_log('DEBUG ADD TO CART: Carrinho atual tem ' . count($cartRef) . ' itens');
         
         // Adicionar produto principal
         $cartRef[] = [
@@ -2454,55 +2449,34 @@ class PublicCartController extends Controller
 
         // Processar produtos de cross-sell
         if (isset($_POST['cross_sell']) && is_array($_POST['cross_sell'])) {
-            error_log('DEBUG: Processando ' . count($_POST['cross_sell']) . ' cross-sells');
-            error_log('DEBUG: Cross-sells recebidos: ' . json_encode($_POST['cross_sell']));
             
             foreach ($_POST['cross_sell'] as $crossSellId) {
                 $crossSellId = (int)$crossSellId;
                 
                 if ($crossSellId <= 0) {
-                    error_log("DEBUG: Cross-sell ID inválido (<=0): {$crossSellId}");
                     continue;
                 }
                 
-                error_log("DEBUG: Processando cross-sell ID: {$crossSellId}");
-                
-                $crossSellProduct = Product::find($crossSellId);
+                $crossSellProduct = Product::find($crossSellId, true, (int)$company['id']);
                 
                 if (!$crossSellProduct) {
-                    error_log("DEBUG: Cross-sell produto não encontrado: {$crossSellId}");
                     continue;
                 }
                 
-                error_log("DEBUG: Cross-sell produto encontrado: {$crossSellProduct['name']}");
-                
                 if ((int)($crossSellProduct['company_id'] ?? 0) !== (int)$company['id']) {
-                    error_log("DEBUG: Cross-sell de outra empresa: {$crossSellId}");
                     continue;
                 }
                 
                 if ((int)($crossSellProduct['active'] ?? 0) !== 1) {
-                    error_log("DEBUG: Cross-sell inativo: {$crossSellId}");
                     continue;
                 }
                 
                 // Adicionar produto de cross-sell ao carrinho (quantidade 1)
                 // Buscar personalização usando contexto (parentId = productId principal)
-                error_log("DEBUG: Buscando personalização contextualizada - crossSellId: {$crossSellId}, parentId: {$productId}");
                 $crossSellCustomization = $this->snapshotCustomization($crossSellId, $productId);
                 
                 if ($crossSellCustomization === null) {
-                    error_log("DEBUG: Personalização contextualizada não encontrada, tentando default");
                     $crossSellCustomization = $this->defaultCustomizationSnapshot($crossSellId);
-                    
-                    if ($crossSellCustomization === null) {
-                        error_log("DEBUG: Nenhuma personalização encontrada (nem contextualizada nem default)");
-                    } else {
-                        error_log("DEBUG: Personalização default encontrada");
-                    }
-                } else {
-                    error_log("DEBUG: Personalização contextualizada encontrada!");
-                    error_log("DEBUG: Personalização: " . json_encode($crossSellCustomization));
                 }
                 
                 $cartItem = [
@@ -2516,18 +2490,12 @@ class PublicCartController extends Controller
                     'added_at' => time(),
                 ];
                 
-                error_log("DEBUG: Adicionando cross-sell ao carrinho: " . json_encode($cartItem));
                 $cartRef[] = $cartItem;
                 
                 // Limpar personalização contextualizada após adicionar ao carrinho
-                error_log("DEBUG: Limpando personalização contextualizada de {$crossSellId}");
                 $this->storage->removeCustomization($crossSellId, null, $productId);
             }
-        } else {
-            error_log('DEBUG: Nenhum cross-sell recebido no POST');
         }
-
-        error_log('DEBUG ADD TO CART: Total de itens no carrinho após adicionar: ' . count($cartRef));
         
         $this->storage->setCart($cartRef);
 
@@ -2902,8 +2870,7 @@ class PublicCartController extends Controller
         $zonesRaw = DeliveryZone::allByCompany($companyId);
         $zonesPresent = count($zonesRaw) > 0;
 
-        require_once __DIR__ . '/../services/OrderCalculatorService.php';
-        $calc = OrderCalculatorService::computeCheckoutTotals([
+        $calc = CheckoutTotalsService::compute([
             'subtotal' => $subtotal,
             'delivery_fee' => $deliveryFee,
             'loyalty_discount' => $loyaltyDiscount,
@@ -2998,7 +2965,7 @@ class PublicCartController extends Controller
         $this->storage->setCart($cart);
         $_SESSION['cart'] = $cart;
 
-        $skipped = count(Order::getItems($orderId)) - $added;
+        $skipped = count(Order::getItems($orderId, (int)$company['id'])) - $added;
         $qs = $skipped > 0 ? '?reorder=partial&added=' . $added . '&skipped=' . $skipped : '?reorder=ok';
 
         header('Location: ' . base_url(rawurlencode($slug) . '/cart' . $qs));

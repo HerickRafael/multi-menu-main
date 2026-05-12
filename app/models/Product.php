@@ -166,7 +166,7 @@ class Product
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function find(int $id, bool $applyFee = true): ?array
+    public static function find(int $id, bool $applyFee = true, ?int $companyId = null): ?array
     {
         // Tentar buscar do cache apenas se aplicando taxa (comportamento padrão)
         require_once __DIR__ . '/../services/ProductCache.php';
@@ -175,13 +175,21 @@ class Product
         if ($applyFee) {
             $cached = $cache->getProduct($id);
             if ($cached !== null) {
-                return $cached;
+                if ($companyId === null || (int)($cached['company_id'] ?? 0) === (int)$companyId) {
+                    return $cached;
+                }
             }
         }
 
         // Buscar do banco
-        $st = db()->prepare('SELECT * FROM products WHERE id = ?');
-        $st->execute([$id]);
+        $sql = 'SELECT * FROM products WHERE id = ?';
+        $params = [$id];
+        if ($companyId !== null) {
+            $sql .= ' AND company_id = ?';
+            $params[] = $companyId;
+        }
+        $st = db()->prepare($sql);
+        $st->execute($params);
         $row = $st->fetch(PDO::FETCH_ASSOC);
 
         if (!$row) {

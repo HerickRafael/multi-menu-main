@@ -174,7 +174,7 @@ class PublicProductController extends Controller
         }
 
         // Produto
-        $product = Product::find($id);
+        $product = Product::find($id, true, (int)$company['id']);
 
         if (
             !$product ||
@@ -280,7 +280,7 @@ class PublicProductController extends Controller
             return;
         }
 
-        $product = Product::find($id);
+        $product = Product::find($id, true, (int)$company['id']);
 
         if (
             !$product ||
@@ -308,7 +308,7 @@ class PublicProductController extends Controller
         $redirectTarget = $id;
 
         if ($parentId && $parentId !== $id) {
-            $parentProduct = Product::find($parentId);
+            $parentProduct = Product::find($parentId, true, (int)$company['id']);
 
             if (
                 $parentProduct &&
@@ -544,9 +544,6 @@ class PublicProductController extends Controller
         $parentForSave = $parentId && $parentId !== $id ? $parentId : null;
         $unitForSave = $unitIndex > 0 ? $unitIndex : null;
         
-        error_log("DEBUG saveCustomization: productId=$id, parentId=" . ($parentForSave ?? 'null') . ", unitIndex=" . ($unitForSave ?? 'null'));
-        error_log("DEBUG saveCustomization: customToSave=" . json_encode($customToSave));
-        
         $store->setCustomization(
             $id,
             $customToSave,
@@ -554,10 +551,6 @@ class PublicProductController extends Controller
             $parentForSave,
             $unitForSave
         );
-        
-        // DEBUG: Verificar o que foi salvo
-        $allCustoms = $store->getCustomizations();
-        error_log("DEBUG saveCustomization: Todas as chaves depois de salvar: " . json_encode(array_keys($allCustoms)));
 
         // Se tem parent_id e return_to_parent, apenas salva a personalização e volta
         // Se tem parent_id sem return_to_parent, é personalização de item do combo -> volta para o combo
@@ -690,42 +683,25 @@ class PublicProductController extends Controller
         }
         
         // Processar produtos de cross-sell (se houver)
-        error_log('DEBUG: Verificando cross-sells...');
-        error_log('DEBUG: $_POST keys: ' . json_encode(array_keys($_POST)));
-        error_log('DEBUG: isset($_POST[cross_sell]): ' . (isset($_POST['cross_sell']) ? 'SIM' : 'NÃO'));
-        error_log('DEBUG: is_array($_POST[cross_sell]): ' . (isset($_POST['cross_sell']) && is_array($_POST['cross_sell']) ? 'SIM' : 'NÃO'));
-        
         if (isset($_POST['cross_sell']) && is_array($_POST['cross_sell'])) {
-            error_log('DEBUG: ========== PROCESSANDO CROSS-SELLS ==========');
-            error_log('DEBUG: Total de cross-sells recebidos: ' . count($_POST['cross_sell']));
-            error_log('DEBUG: IDs recebidos: ' . json_encode($_POST['cross_sell']));
             
             foreach ($_POST['cross_sell'] as $crossSellId) {
                 $crossSellId = (int)$crossSellId;
-                error_log("DEBUG: Processando cross-sell ID: {$crossSellId}");
                 
                 if ($crossSellId <= 0) {
-                    error_log("DEBUG: Cross-sell ID {$crossSellId} INVÁLIDO (menor ou igual a zero)");
                     continue;
                 }
                 
-                $crossSellProduct = Product::find($crossSellId);
+                $crossSellProduct = Product::find($crossSellId, true, (int)$company['id']);
                 
                 if (!$crossSellProduct || 
                     (int)($crossSellProduct['company_id'] ?? 0) !== (int)$company['id'] || 
                     (int)($crossSellProduct['active'] ?? 0) !== 1) {
-                    error_log("DEBUG: Cross-sell ID {$crossSellId} inválido ou inativo");
                     continue;
                 }
                 
                 // Buscar personalização salva para este cross-sell (contextualizada com o produto pai)
                 $crossSellCustomization = $store->getCustomization($crossSellId, null, $product['id']);
-                
-                if ($crossSellCustomization) {
-                    error_log("DEBUG: Cross-sell {$crossSellId} TEM personalização salva");
-                } else {
-                    error_log("DEBUG: Cross-sell {$crossSellId} SEM personalização");
-                }
                 
                 // Adicionar cross-sell ao carrinho
                 $cartRef[] = [
@@ -738,8 +714,6 @@ class PublicProductController extends Controller
                     'combo_customizations' => [],
                     'added_at' => time(),
                 ];
-                
-                error_log("DEBUG: Cross-sell {$crossSellId} adicionado ao carrinho");
                 // Consome personalização temporária do cross-sell para não vazar para adições futuras.
                 $store->removeCustomization($crossSellId, null, $product['id']);
             }
@@ -886,7 +860,7 @@ class PublicProductController extends Controller
         // O requireLogin verifica se a empresa exige login, mas a personalização 
         // é permitida para visitantes (as customizações são salvas na sessão)
 
-        $product = Product::find($id);
+        $product = Product::find($id, true, (int)$company['id']);
 
         if (!$product || (int)$product['company_id'] !== (int)$company['id'] || (int)($product['active'] ?? 0) !== 1) {
             http_response_code(404);
@@ -1003,7 +977,7 @@ class PublicProductController extends Controller
             $backUrl = base_url($slug . '/cart');
             $parentBackUrl = null;
         } elseif ($parentId && $parentId !== $id) {
-            $parentProduct = Product::find($parentId);
+            $parentProduct = Product::find($parentId, true, (int)$company['id']);
 
             if (
                 $parentProduct &&
@@ -1091,7 +1065,7 @@ class PublicProductController extends Controller
             return;
         }
 
-        $product = Product::find($id);
+        $product = Product::find($id, true, (int)$company['id']);
 
         if (!$product || (int)$product['company_id'] !== (int)$company['id'] || (int)($product['active'] ?? 0) !== 1) {
             // Produto não encontrado - redirecionar para a home

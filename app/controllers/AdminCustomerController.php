@@ -5,6 +5,9 @@ declare(strict_types=1);
 // 🚀 Bootstrap centralizado
 require_once __DIR__ . '/../bootstrap.php';
 
+require_once __DIR__ . '/../modules/auth/AdminGuard.php';
+require_once __DIR__ . '/../modules/customers/CustomerListService.php';
+
 /**
  * Controller para gestão de Clientes no painel admin
  * 
@@ -23,31 +26,7 @@ class AdminCustomerController extends Controller
      */
     private function guard(string $slug): array
     {
-        Auth::start();
-        $user = Auth::user();
-
-        if (!$user) {
-            header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/login'));
-            exit;
-        }
-
-        $company = Company::findBySlug($slug);
-
-        if (!$company || empty($company['id'])) {
-            http_response_code(404);
-            echo 'Empresa não encontrada';
-            exit;
-        }
-
-        $isRoot = ($user['role'] === 'root');
-
-        if (!$isRoot && (int)$user['company_id'] !== (int)$company['id']) {
-            http_response_code(403);
-            echo 'Acesso negado';
-            exit;
-        }
-
-        return [$user, $company];
+        return AdminGuard::requireCompanyAccess($slug);
     }
 
     /**
@@ -60,72 +39,13 @@ class AdminCustomerController extends Controller
         $companyId = (int)$company['id'];
 
         $pdo = db();
-
-        // Parâmetros de busca e paginação
         $search = trim($_GET['q'] ?? '');
         $page = max(1, (int)($_GET['page'] ?? 1));
-        $offset = ($page - 1) * self::ITEMS_PER_PAGE;
 
-        // Query base
-        $whereClause = 'WHERE c.company_id = ?';
-        $queryParams = [$companyId];
-
-        // Filtro de busca
-        if ($search !== '') {
-            $whereClause .= ' AND (c.name LIKE ? OR c.whatsapp LIKE ? OR c.whatsapp_e164 LIKE ?)';
-            $searchTerm = '%' . $search . '%';
-            $queryParams[] = $searchTerm;
-            $queryParams[] = $searchTerm;
-            $queryParams[] = $searchTerm;
-        }
-
-        // Contar total para paginação
-        $countSql = "SELECT COUNT(*) FROM customers c {$whereClause}";
-        $countStmt = $pdo->prepare($countSql);
-        $countStmt->execute($queryParams);
-        $totalItems = (int)$countStmt->fetchColumn();
-        $totalPages = max(1, (int)ceil($totalItems / self::ITEMS_PER_PAGE));
-
-        // Buscar clientes com estatísticas
-        // JOIN por whatsapp usando REGEXP para normalizar (comparar apenas dígitos)
-        $sql = "
-            SELECT 
-                c.*,
-                COUNT(DISTINCT o.id) as total_orders,
-                COALESCE(SUM(CASE WHEN o.status NOT IN ('canceled') THEN o.total ELSE 0 END), 0) as total_spent,
-                MAX(o.created_at) as last_order_at
-            FROM customers c
-            LEFT JOIN orders o ON (
-                o.customer_phone = c.whatsapp 
-                OR o.customer_phone = c.whatsapp_e164 
-                OR o.customer_phone = REGEXP_REPLACE(c.whatsapp, '[^0-9]', '')
-                OR CONCAT('55', o.customer_phone) = c.whatsapp_e164
-                OR o.customer_phone = SUBSTRING(c.whatsapp_e164, 3)
-            ) AND o.company_id = c.company_id
-            {$whereClause}
-            GROUP BY c.id
-            ORDER BY c.created_at DESC
-            LIMIT ? OFFSET ?
-        ";
-        
-        $queryParams[] = self::ITEMS_PER_PAGE;
-        $queryParams[] = $offset;
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($queryParams);
-        $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Estatísticas gerais
-        $statsStmt = $pdo->prepare("
-            SELECT 
-                COUNT(*) as total_customers,
-                COUNT(CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 END) as new_customers_30d,
-                COUNT(CASE WHEN last_login_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 END) as active_7d
-            FROM customers 
-            WHERE company_id = ?
-        ");
-        $statsStmt->execute([$companyId]);
-        $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+        $result = CustomerListService::listWithStats($pdo, $companyId, $search, $page, self::ITEMS_PER_PAGE);
+        $customers = $result['customers'];
+        $stats = $result['stats'];
+        $pagination = $result['pagination'];
 
         // Mensagens de sucesso/erro
         $success = $this->getFlashMessage('success');
@@ -137,9 +57,9 @@ class AdminCustomerController extends Controller
             'customers' => $customers,
             'stats' => $stats,
             'search' => $search,
-            'page' => $page,
-            'totalPages' => $totalPages,
-            'totalItems' => $totalItems,
+            'page' => $pagination['page'],
+            'totalPages' => $pagination['totalPages'],
+            'totalItems' => $pagination['totalItems'],
             'success' => $success,
             'error' => $error,
         ]);

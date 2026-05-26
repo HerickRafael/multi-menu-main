@@ -344,19 +344,19 @@ export const STALE_TIME_MS = 45_000        // 45s
 export const REFETCH_INTERVAL_MS = 60_000  // 60s for dashboard
 
 export const STALE_TIMES = {
-  DASHBOARD: 30_000,      // 30s
-  STORES: 45_000,         // 45s
-  ORDERS: 45_000,         // 45s
-  USERS: 45_000,          // 45s
-  MONITORING: 30_000,     // 30s
-  WHATSAPP: 30_000,       // 30s
-  QUEUES: 45_000,         // 45s
-  WEBHOOKS: 45_000,       // 45s
-  LOGS: 45_000,           // 45s
-  AUDIT: 60_000,          // 60s
-  PERMISSIONS: 60_000,    // 60s
-  FEATURE_FLAGS: 60_000,  // 60s
-  ANALYTICS: 60_000,      // 60s
-  SETTINGS: 60_000,       // 60s
-  SYSTEM: 30_000,         // 30s
+  DASHBOARD: 120_000,     // 2min
+  STORES: 180_000,        // 3min
+  ORDERS: 120_000,        // 2min
+  USERS: 180_000,         // 3min
+  MONITORING: 60_000,     // 1min
+  WHATSAPP: 120_000,      // 2min
+  QUEUES: 120_000,        // 2min
+  WEBHOOKS: 180_000,      // 3min
+  LOGS: 120_000,          // 2min
+  AUDIT: 300_000,         // 5min
+  PERMISSIONS: 600_000,   // 10min
+  FEATURE_FLAGS: 600_000, // 10min
+  ANALYTICS: 300_000,     // 5min
+  SETTINGS: 600_000,      // 10min
+  SYSTEM: 60_000,         // 1min
 } as const

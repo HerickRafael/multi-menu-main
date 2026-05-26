@@ -7,6 +7,7 @@
     "doc": "docs"
   },
   "scripts": {
+    "start:project": "bash scripts/start_project.sh",
     "build:css": "NODE_ENV=production npx tailwindcss -i src/tailwind.css -o public/assets/css/tailwind.min.css --minify",
     "build:js": "node scripts/dev/minify-js.js",
     "check:legacy": "bash scripts/dev/check-legacy-artifacts.sh",

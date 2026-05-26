@@ -33,7 +33,7 @@ class AdminAuthController extends Controller
         // Se já estiver logado e o contexto for desta empresa, redireciona
         $u = Auth::user();
 
-        if ($u && self::sessionCompanyIdMatches($company['id'])) {
+        if ($u && Auth::hasCompanyAccess((int)$company['id'], $u)) {
             header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/dashboard'));
             exit;
         }
@@ -93,13 +93,9 @@ class AdminAuthController extends Controller
               ((int)$user['company_id'] === (int)$company['id']);
 
             if ($canAccess) {
-                // Faz login do usuário
                 Auth::login($user);
 
-                // Define/atualiza o CONTEXTO de empresa ativa na sessão.
-                // Isso é importante quando o root loga: user.company_id pode ser null.
-                $_SESSION['active_company_id'] = (int)$company['id'];
-                $_SESSION['active_company_slug'] = $slug;
+                Auth::setActiveCompany((int)$company['id'], $slug);
 
                 // PRG: redireciona para evitar reenvio de POST
                 header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/dashboard'));
@@ -126,31 +122,10 @@ class AdminAuthController extends Controller
 
         Auth::logout();
 
-        // limpa também o contexto de empresa ativa
-        unset($_SESSION['active_company_id'], $_SESSION['active_company_slug']);
+        Auth::clearActiveCompany();
 
         header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/login'));
         exit;
     }
 
-    /** Helper: confere se a sessão está no contexto desta empresa */
-    private static function sessionCompanyIdMatches(int $companyId): bool
-    {
-        // Se você usa Auth::companyId() para pegar o company_id do usuário
-        // e usa 'active_company_id' para o CONTEXTO (root),
-        // priorize 'active_company_id' para a checagem.
-        $active = $_SESSION['active_company_id'] ?? null;
-
-        if ($active !== null) {
-            return ((int)$active === (int)$companyId);
-        }
-        // fallback: company_id do próprio usuário
-        $u = Auth::user();
-
-        if (!$u) {
-            return false;
-        }
-
-        return ((int)($u['company_id'] ?? 0) === (int)$companyId);
-    }
 }

@@ -1,4 +1,10 @@
-<!doctype html>
+<?php
+// SPA Guide capture mode: emit only the inner content (no chrome) for SPA payload injection.
+if (!empty($GLOBALS['__SPA_GUIDE_CAPTURE__'])) {
+    echo $content ?? '';
+    return;
+}
+?><!doctype html>
 <html lang="pt-br">
 <?php
 $companyData = is_array($company ?? null) ? $company : null;
@@ -89,15 +95,68 @@ if ($bellConfig !== '') {
   </script>
 </head>
 <body class="bg-slate-50 text-slate-900">
-  
   <?php
-  // Verificar se deve exibir sidebar (não exibir em páginas full-width como KDS ou login)
+  // Verificar se deve exibir shell completo (topbar + sidebar)
   $showSidebar = !isset($hideSidebar) || !$hideSidebar;
   $rn = (string)(($routeName ?? null) ?: (function_exists('current_route_name') ? current_route_name() : null) ?: '');
   $isKdsPage  = in_array($rn, ['kds.index', 'kds.data', 'kds.status'], true);
   $isAuthPage = in_array($rn, ['admin.auth.login', 'admin.auth.logout'], true);
   $showSidebar = $showSidebar && !$isKdsPage && !$isAuthPage;
+  ?>
+
+  <?php if ($showSidebar): ?>
+  <?php
+  $topbarCompanyName = trim((string)($companyData['name'] ?? 'Loja'));
+  $topbarLogoUrl = base_url('assets/icons/admin/logo-multimenu.png');
+  ?>
+
+  <header class="admin-topbar fixed inset-x-0 top-0 z-50 h-12 px-3" style="background:#efeff0;border-bottom:none;">
+    <div class="mx-auto flex h-full items-center justify-between" style="max-width:1800px;">
+      <div class="flex items-center gap-2">
+        <button
+          id="topbar-sidebar-toggle"
+          type="button"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-600 transition-colors hover:bg-zinc-200"
+          aria-label="Alternar menu lateral"
+          aria-controls="smart-sidebar"
+          aria-expanded="true"
+        >
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+
+        <div class="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-1 ring-1 ring-zinc-200">
+          <div class="h-4 w-4 overflow-hidden rounded-full flex items-center justify-center shrink-0">
+            <img src="<?= e($topbarLogoUrl) ?>" alt="Logo da loja" class="h-4 w-4 object-contain" loading="lazy" />
+          </div>
+          <span class="text-sm font-semibold text-zinc-700 max-w-[140px] truncate"><?= e($topbarCompanyName) ?></span>
+        </div>
+
+        <div class="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-1 ring-1 ring-zinc-200">
+          <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">●</span>
+          <span class="text-sm font-semibold text-zinc-700">iFood</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 text-zinc-600">
+        <button type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-zinc-200" aria-label="Ajuda">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M9.75 9a2.25 2.25 0 114.15 1.2c-.33.6-.85 1.02-1.37 1.42-.5.38-.98.77-1.2 1.28M12 16h.01" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <button type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-zinc-200" aria-label="Notificações">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M15 17h5l-1.4-1.4a2 2 0 01-.6-1.4V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+  <?php endif; ?>
   
+  <?php
     if ($showSidebar):
       try {
         $resolvedRouteName = isset($routeName) && is_string($routeName) && trim($routeName) !== ''
@@ -140,11 +199,23 @@ if ($bellConfig !== '') {
   endif;
   ?>
   
-  <div class="<?= $showSidebar ? 'sidebar-main-content' : '' ?>">
-    <div class="max-w-7xl mx-auto px-4 py-4 lg:px-6 lg:py-6 box-border">
+  <?php if ($showSidebar): ?>
+  <main id="admin-main-content" class="sidebar-main-content">
+    <div id="admin-content-frame">
+      <div id="admin-content-scroll">
+        <div class="max-w-7xl mx-auto px-4 py-3 lg:px-6 lg:py-4 box-border">
+          <?= $content ?? '' ?>
+        </div>
+      </div>
+    </div>
+  </main>
+  <?php else: ?>
+  <div class="admin-top-content">
+    <div class="max-w-7xl mx-auto px-4 py-3 lg:px-6 lg:py-4 box-border">
       <?= $content ?? '' ?>
     </div>
   </div>
+  <?php endif; ?>
 
   <!-- Sistemas centralizados -->
   <link rel="stylesheet" href="<?= base_url('assets/css/ui.css') ?>">
@@ -165,5 +236,55 @@ if ($bellConfig !== '') {
   <script src="<?= base_url('assets/js/admin.min.js') ?>"></script>
   <script src="<?= base_url('assets/js/lazy-loading.min.js') ?>"></script>
   <script src="<?= base_url('assets/js/admin-pwa.min.js') ?>?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/assets/js/admin-pwa.min.js') ?: time() ?>"></script>
+
+  <style>
+    .admin-top-content { padding-top: 3rem; }
+
+    /* ── Fixed-frame layout (desktop) — matches StoreDashboardLayout (60 / 14 in Tailwind = 240px / 56px) ── */
+    @media (min-width: 1024px) {
+      #admin-main-content {
+        position: fixed !important;
+        top: 48px !important;
+        bottom: 0 !important;
+        right: 0 !important;
+        left: 240px !important;
+        overflow: hidden !important;
+        background: #f5f5f5 !important;
+        transition: left 0.3s ease-in-out;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      #admin-main-content.collapsed { left: 56px !important; }
+      .sidebar-preload-collapsed #admin-main-content {
+        left: 56px !important;
+        transition: none !important;
+      }
+      #admin-content-frame {
+        position: absolute;
+        inset: 0;
+        border-radius: 28px 28px 0 0;
+        background: #fff;
+        border: 1px solid #e4e4e7;
+        border-bottom: 0;
+      }
+      #admin-content-scroll {
+        height: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
+
+    /* ── Mobile: normal document flow ── */
+    @media (max-width: 1023px) {
+      #admin-main-content {
+        display: block;
+        margin-top: 48px;
+      }
+      #admin-content-frame {
+        background: #fff;
+        min-height: calc(100vh - 48px);
+      }
+    }
+  </style>
 </body>
 </html>

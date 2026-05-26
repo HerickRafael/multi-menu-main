@@ -52,7 +52,12 @@ export function useMonitoring(): UseQueryResult<MonitoringData, Error> {
       return unwrap(response);
     },
     staleTime: STALE_TIMES.MONITORING,
-    refetchInterval: STALE_TIMES.MONITORING,
+    refetchInterval: () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return false
+      }
+      return STALE_TIMES.MONITORING
+    },
     retry: 1,
   });
 }

@@ -123,37 +123,94 @@ class AdminSettingsController extends Controller
 
     public function index($params)
     {
-        [$u,$company] = $this->guard($params['slug']);
+        [$u, $company] = $this->guard($params['slug']);
+        $slug = (string)$company['slug'];
+
         $error = $_SESSION['flash_error'] ?? null;
         unset($_SESSION['flash_error']);
-        
+
         $success = null;
         if (isset($_GET['success']) && $_GET['success'] === '1') {
             $success = 'Configurações salvas com sucesso.';
         }
-        
+
         $hours = $this->loadHours((int)$company['id']);
         $dailyHighlightTexts = get_all_daily_highlight_texts($company);
-        
-        // Carregar dias habilitados
+
         $enabledDays = [];
         if (!empty($company['highlight_texts_enabled_days'])) {
             $json = $company['highlight_texts_enabled_days'];
             $enabledDays = is_string($json) ? json_decode($json, true) : $json;
             $enabledDays = is_array($enabledDays) ? $enabledDays : [];
         }
-        
-        $dayLabels = [
-            'monday'    => 'Segunda-feira',
-            'tuesday'   => 'Terça-feira',
-            'wednesday' => 'Quarta-feira',
-            'thursday'  => 'Quinta-feira',
-            'friday'    => 'Sexta-feira',
-            'saturday'  => 'Sábado',
-            'sunday'    => 'Domingo'
+
+        $colorDefaults = [
+            'menu_header_text_color' => '#FFFFFF',
+            'menu_header_button_color' => '#FACC15',
+            'menu_header_bg_color' => '#5B21B6',
+            'menu_logo_border_color' => '#7C3AED',
+            'menu_group_title_bg_color' => '#FACC15',
+            'menu_group_title_text_color' => '#000000',
+            'menu_welcome_bg_color' => '#6B21A8',
+            'menu_welcome_text_color' => '#FFFFFF',
         ];
 
-        return $this->view('admin/settings/index', compact('company', 'hours', 'error', 'success', 'dailyHighlightTexts', 'enabledDays', 'dayLabels'));
+        $colors = [];
+        foreach ($colorDefaults as $key => $default) {
+            $value = (string)($company[$key] ?? '');
+            $value = trim($value);
+            if ($value !== '' && $value[0] !== '#') {
+                $value = '#' . $value;
+            }
+            if (!preg_match('/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $value)) {
+                $value = $default;
+            } elseif (strlen($value) === 4) {
+                $value = '#' . $value[1] . $value[1] . $value[2] . $value[2] . $value[3] . $value[3];
+            }
+            $colors[$key] = strtoupper($value);
+        }
+
+        $hoursPayload = [];
+        for ($d = 1; $d <= 7; $d++) {
+            $row = $hours[$d] ?? null;
+            $hoursPayload[$d] = [
+                'weekday' => $d,
+                'is_open' => $row ? (int)($row['is_open'] ?? 0) === 1 : false,
+                'open1' => $row['open1'] ?? null,
+                'close1' => $row['close1'] ?? null,
+                'open2' => $row['open2'] ?? null,
+                'close2' => $row['close2'] ?? null,
+            ];
+        }
+
+        $payload = [
+            'company' => [
+                'id' => (int)($company['id'] ?? 0),
+                'name' => (string)($company['name'] ?? ''),
+                'whatsapp' => (string)($company['whatsapp'] ?? ''),
+                'address' => (string)($company['address'] ?? ''),
+                'min_order' => $company['min_order'] ?? null,
+                'avg_delivery_min_from' => $company['avg_delivery_min_from'] ?? null,
+                'avg_delivery_min_to' => $company['avg_delivery_min_to'] ?? null,
+                'logo' => (string)($company['logo'] ?? ''),
+                'banner' => (string)($company['banner'] ?? ''),
+                'evolution_server_url' => (string)($company['evolution_server_url'] ?? ''),
+                'evolution_api_key' => (string)($company['evolution_api_key'] ?? ''),
+                'ga_measurement_id' => (string)($company['ga_measurement_id'] ?? ''),
+            ],
+            'colors' => $colors,
+            'hours' => $hoursPayload,
+            'daily_highlight_texts' => $dailyHighlightTexts,
+            'enabled_days' => $enabledDays,
+            'flash' => ['error' => $error, 'success' => $success],
+            'urls' => [
+                'submit' => '/admin/' . rawurlencode($slug) . '/settings',
+                'dashboard' => '/admin/' . rawurlencode($slug) . '/dashboard',
+                'menu' => '/' . rawurlencode($slug),
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_SETTINGS__', $payload);
     }
 
     private function normalizeWhatsapp(string $raw): string

@@ -13,6 +13,7 @@ $rows = $data['latest'] ?? [];
   </div>
   <div class="toolbar-right">
     <form method="post" action="<?= htmlspecialchars(base_url('superadmin/observability/run-checks'), ENT_QUOTES, 'UTF-8') ?>">
+      <?= function_exists('csrf_field') ? csrf_field() : '' ?>
       <button class="btn secondary sm" type="submit">Rodar Health Checks</button>
     </form>
   </div>

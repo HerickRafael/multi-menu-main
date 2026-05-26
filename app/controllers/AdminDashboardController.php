@@ -31,6 +31,8 @@ class AdminDashboardController extends Controller
 
         [ $u, $company ] = $this->guard($slug);
 
+        $forceLegacy = (string)($_GET['legacy'] ?? '') === '1';
+
         $companyId = (int)$company['id'];
         $db = db();
         $categories = Category::listByCompany($companyId);
@@ -45,6 +47,72 @@ class AdminDashboardController extends Controller
             $ing['product_names'] = array_column($assigned, 'name');
         }
         unset($ing);
+
+        if (!$forceLegacy) {
+            $primaryColor = admin_theme_primary_color($company);
+            $primaryGradient = admin_theme_gradient($company);
+
+            $payload = [
+                'metrics' => [
+                    'categories' => count($categories),
+                    'products' => count($products),
+                    'ingredients' => $ingredientsCount,
+                    'orders' => $ordersCount,
+                ],
+                'recent' => [
+                    'categories' => array_map(static function (array $c): array {
+                        return [
+                            'id' => (int)($c['id'] ?? 0),
+                            'name' => (string)($c['name'] ?? 'Categoria'),
+                        ];
+                    }, array_slice($categories, 0, 8)),
+                    'products' => array_map(static function (array $p): array {
+                        return [
+                            'id' => (int)($p['id'] ?? 0),
+                            'name' => (string)($p['name'] ?? 'Produto'),
+                            'price' => (float)($p['price'] ?? 0),
+                            'promo_price' => isset($p['promo_price']) ? (float)$p['promo_price'] : null,
+                            'image' => (string)($p['image'] ?? ''),
+                        ];
+                    }, array_slice($products, 0, 8)),
+                    'ingredients' => array_map(static function (array $i): array {
+                        return [
+                            'id' => (int)($i['id'] ?? 0),
+                            'name' => (string)($i['name'] ?? 'Ingrediente'),
+                            'image_path' => (string)($i['image_path'] ?? ''),
+                        ];
+                    }, array_slice($recentIngredients, 0, 8)),
+                    'orders' => array_map(static function (array $o): array {
+                        return [
+                            'id' => (int)($o['id'] ?? 0),
+                            'order_number' => (int)($o['order_number'] ?? $o['id'] ?? 0),
+                            'customer_name' => (string)($o['customer_name'] ?? 'Cliente'),
+                            'total' => (float)($o['total'] ?? 0),
+                            'status' => (string)($o['status'] ?? 'pending'),
+                            'created_at' => (string)($o['created_at'] ?? ''),
+                        ];
+                    }, array_slice($recentOrders, 0, 8)),
+                ],
+                'links' => [
+                    'orders' => '/admin/' . rawurlencode($slug) . '/orders',
+                    'products' => '/admin/' . rawurlencode($slug) . '/products',
+                    'categories' => '/admin/' . rawurlencode($slug) . '/categories',
+                    'settings' => '/admin/' . rawurlencode($slug) . '/settings',
+                    'analytics' => '/admin/' . rawurlencode($slug) . '/analytics',
+                    'customers' => '/admin/' . rawurlencode($slug) . '/customers',
+                    'financial' => '/admin/' . rawurlencode($slug) . '/financial',
+                    'logout' => '/admin/' . rawurlencode($slug) . '/logout',
+                    'menu' => '/' . rawurlencode($slug),
+                ],
+                'theme' => [
+                    'primaryColor' => $primaryColor,
+                    'primaryGradient' => $primaryGradient,
+                ],
+            ];
+
+            \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_DASHBOARD__', $payload);
+            return;
+        }
 
         // slug efetivo do contexto (usado para montar URLs no dashboard, ex.: botão Pedidos)
         $activeSlug = $this->currentCompanySlug() ?? $slug;

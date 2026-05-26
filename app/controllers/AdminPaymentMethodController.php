@@ -297,25 +297,63 @@ class AdminPaymentMethodController extends Controller
     {
         $slug = (string)($params['slug'] ?? '');
         [$user, $company] = $this->guard($slug);
-        $methods = PaymentMethod::allByCompany((int)$company['id']);
+        $companyId = (int)$company['id'];
 
+        $methods = PaymentMethod::allByCompany($companyId);
         $flash = $_SESSION['flash_payment'] ?? null;
-        $old   = $_SESSION['old_payment'] ?? [
-            'name' => '',
-            'instructions' => '',
-            'sort_order' => PaymentMethod::nextSortOrder((int)$company['id']),
-            'active' => 1,
-            'type' => 'credit',
-            'meta' => [],
-        ];
         $errors = $_SESSION['errors_payment'] ?? [];
-
         unset($_SESSION['flash_payment'], $_SESSION['old_payment'], $_SESSION['errors_payment']);
 
-        $title = 'Métodos de pagamento - ' . ($company['name'] ?? '');
         $brandLibrary = $this->listBrandLibrary();
 
-        return $this->view('admin/payments/index', compact('company', 'user', 'methods', 'flash', 'old', 'errors', 'title', 'brandLibrary'));
+        $methodsPayload = [];
+        foreach ($methods as $m) {
+            $meta = [];
+            if (!empty($m['meta'])) {
+                $decoded = is_string($m['meta']) ? json_decode($m['meta'], true) : $m['meta'];
+                if (is_array($decoded)) {
+                    $meta = $decoded;
+                }
+            }
+            $methodsPayload[] = [
+                'id' => (int)$m['id'],
+                'name' => (string)($m['name'] ?? ''),
+                'instructions' => (string)($m['instructions'] ?? ''),
+                'sort_order' => (int)($m['sort_order'] ?? 0),
+                'active' => (int)($m['active'] ?? 0) === 1,
+                'type' => (string)($m['type'] ?? 'others'),
+                'pix_key' => (string)($m['pix_key'] ?? ''),
+                'meta' => $meta,
+                'icon_url' => $this->buildIconUrlFromMeta($meta),
+            ];
+        }
+
+        $payload = [
+            'methods' => $methodsPayload,
+            'next_sort_order' => PaymentMethod::nextSortOrder($companyId),
+            'brand_library' => array_map(static function (array $b): array {
+                return [
+                    'slug' => (string)$b['slug'],
+                    'label' => (string)$b['label'],
+                    'value' => (string)$b['value'],
+                    'url' => (string)$b['url'],
+                ];
+            }, $brandLibrary),
+            'flash' => [
+                'type' => isset($flash['type']) ? (string)$flash['type'] : null,
+                'message' => isset($flash['message']) ? (string)$flash['message'] : null,
+            ],
+            'errors' => array_values(array_map('strval', $errors)),
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/payment-methods',
+                'store' => '/admin/' . rawurlencode($slug) . '/payment-methods',
+                'update_base' => '/admin/' . rawurlencode($slug) . '/payment-methods/',
+                'destroy_base' => '/admin/' . rawurlencode($slug) . '/payment-methods/',
+                'batch' => '/admin/' . rawurlencode($slug) . '/payment-methods/batch',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_PAYMENT_METHODS__', $payload);
     }
 
     private function isAjaxRequest(): bool

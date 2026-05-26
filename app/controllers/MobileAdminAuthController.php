@@ -84,15 +84,14 @@ class MobileAdminAuthController extends Controller
         }
 
         // Verifica se é admin e pertence à empresa (ou é root)
-        $isRoot = $user['role'] === 'root';
-        $isAdmin = in_array($user['role'], ['root', 'owner']);
+        $isAdmin = in_array($user['role'], ['root', 'owner'], true);
         
         if (!$isAdmin) {
             header('Location: /login?error=permission');
             exit;
         }
 
-        if (!$isRoot && (int)$user['company_id'] !== (int)$company['id']) {
+        if (!Auth::hasCompanyAccess((int)$company['id'], $user)) {
             header('Location: /login?error=permission');
             exit;
         }

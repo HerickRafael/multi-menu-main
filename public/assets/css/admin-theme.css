@@ -31,20 +31,18 @@
 }
 .admin-primary-border    { border-color: var(--admin-primary-color); }
 
-/* ---- Sidebar — estado ativo ---- */
+/* ---- Sidebar — estado ativo (matches StoreDashboardLayout: zinc-200/90 + inset border) ---- */
 .admin-sidebar-active {
-  background-image: var(--admin-primary-gradient);
-  background-color: var(--admin-primary-color);
-  color: #fff;
-  box-shadow: 0 4px 14px var(--admin-primary-ultrasoft);
+  background-color: rgba(228, 228, 231, 0.9); /* zinc-200/90 */
+  color: rgb(9, 9, 11); /* zinc-950 */
 }
 
-/* ---- Sidebar — contexto / hover ---- */
-.admin-sidebar-context           { background-color: var(--admin-primary-ultrasoft); color: var(--admin-primary-color); }
-.admin-sidebar-item-hover:hover  { background-color: var(--admin-primary-ultrasoft); color: var(--admin-primary-color); }
-.admin-sidebar-item-hover:active { background-color: var(--admin-primary-light); }
-.admin-sidebar-item-hover:focus  { background-color: var(--admin-primary-ultrasoft); outline: none; }
-.admin-sidebar-contextual-active { background-color: var(--admin-primary-ultrasoft); color: var(--admin-primary-color); }
+/* ---- Sidebar — hover (matches StoreDashboardLayout: zinc-200/70) ---- */
+.admin-sidebar-context           { background-color: rgba(228, 228, 231, 0.5); color: rgb(24, 24, 27); }
+.admin-sidebar-item-hover:hover  { background-color: rgba(228, 228, 231, 0.7); color: rgb(24, 24, 27); }
+.admin-sidebar-item-hover:active { background-color: rgba(228, 228, 231, 0.9); }
+.admin-sidebar-item-hover:focus  { background-color: rgba(228, 228, 231, 0.7); outline: none; }
+.admin-sidebar-contextual-active { background-color: rgba(228, 228, 231, 0.9); color: rgb(9, 9, 11); }
 .admin-sidebar-accent            { background-color: var(--admin-primary-color); }
 
 /* ---- Impressão ---- */
@@ -62,3 +60,11 @@
 .refresh-icon-spin     { animation: spin-refresh 0.6s ease-in-out; }
 .loading-refresh-icon  { animation: spin-refresh 1s linear infinite; }
 button:active .refresh-icon { animation: spin-refresh 0.6s ease-in-out; }
+
+/* ---- Layout: Unificação visual Topbar + Sidebar ---- */
+
+/* Remove apenas sombras e bordas indesejadas; NÃO sobrescreve background */
+div:has(> .max-w-\[1800px\]) {
+  border-bottom: none !important;
+  box-shadow: none !important;
+}

@@ -127,22 +127,54 @@ class AdminLoyaltyDiscountController extends Controller
         $stmtProds->execute([$company['id']]);
         $allProducts = $stmtProds->fetchAll(PDO::FETCH_ASSOC);
 
-        $this->view('admin/loyalty-discount/index', [
-            'user' => $user,
-            'company' => $company,
-            'slug' => $slug,
-            'embedded_delivery_fee' => number_format((float)$embedded_delivery_fee, 2, '.', ''),
-            'loyalty_active' => $loyaltyActive,
-            'loyalty_discount' => number_format($loyaltyDiscount, 2, '.', ''),
-            'loyalty_message' => $loyaltyMessage,
-            'coupon_prefix' => $couponPrefix,
-            'cupons' => $cupons,
-            'cupons_stats' => $cupons_stats,
-            'categories' => $categories,
-            'allProducts' => $allProducts,
-            'success' => $success,
-            'error' => $error
-        ]);
+        $payload = [
+            'embedded_delivery_fee' => (float)$embedded_delivery_fee,
+            'loyalty_active' => $loyaltyActive === 1,
+            'loyalty_discount' => (float)$loyaltyDiscount,
+            'loyalty_message' => (string)$loyaltyMessage,
+            'coupon_prefix' => (string)$couponPrefix,
+            'coupons' => array_map(static function (array $c): array {
+                $usageLimit = (int)($c['usage_limit'] ?? 1);
+                $timesUsed = (int)($c['times_used'] ?? 0);
+                $used = (int)($c['is_used'] ?? 0) === 1;
+                $exhausted = $used || ($usageLimit > 0 && $timesUsed >= $usageLimit);
+                return [
+                    'id' => (int)$c['id'],
+                    'coupon_code' => (string)($c['coupon_code'] ?? ''),
+                    'customer_phone' => (string)($c['customer_phone'] ?? ''),
+                    'discount_percentage' => (float)($c['discount_percentage'] ?? 0),
+                    'usage_limit' => $usageLimit,
+                    'times_used' => $timesUsed,
+                    'is_exhausted' => $exhausted,
+                    'used_at' => $c['used_at'] ?? null,
+                    'created_at' => (string)($c['created_at'] ?? ''),
+                ];
+            }, $cupons),
+            'coupons_stats' => $cupons_stats,
+            'categories' => array_map(static function (array $c): array {
+                return ['id' => (int)$c['id'], 'name' => (string)($c['name'] ?? '')];
+            }, $categories),
+            'all_products' => array_map(static function (array $p): array {
+                return [
+                    'id' => (int)$p['id'],
+                    'name' => (string)($p['name'] ?? ''),
+                    'category_id' => isset($p['category_id']) && $p['category_id'] !== null ? (int)$p['category_id'] : null,
+                    'price' => isset($p['price']) ? (float)$p['price'] : 0,
+                    'image' => (string)($p['image'] ?? ''),
+                    'embedded_fee_enabled' => (int)($p['embedded_fee_enabled'] ?? 0) === 1,
+                ];
+            }, $allProducts),
+            'flash' => ['success' => $success, 'error' => $error],
+            'urls' => [
+                'submit' => '/admin/' . rawurlencode($slug) . '/loyalty-discount',
+                'coupons_create' => '/admin/' . rawurlencode($slug) . '/coupons/create',
+                'coupons_edit_base' => '/admin/' . rawurlencode($slug) . '/coupons/',
+                'coupons_destroy_base' => '/admin/' . rawurlencode($slug) . '/coupons/',
+                'coupons_toggle_base' => '/admin/' . rawurlencode($slug) . '/coupons/',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_LOYALTY_DISCOUNT__', $payload);
     }
 
     public function save($params)

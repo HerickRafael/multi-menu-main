@@ -150,38 +150,51 @@ class AdminEvolutionInstanceController extends Controller
      * Página de configuração da instância
      */
     public function config($params)
-    {        
+    {
         try {
-            // Extrair parâmetros do array
             $slug = $params['slug'] ?? null;
             $instanceName = $params['instanceName'] ?? null;
-            
+
             if (!$slug || !$instanceName) {
                 http_response_code(400);
                 echo "Parâmetros inválidos";
                 return;
             }
-            
-            // Usar o método guard para autenticação (igual aos outros controllers admin)
-            [$user, $company] = $this->guard($slug);
 
-            // Buscar informações da instância na Evolution API usando as configurações da empresa
+            [$user, $company] = $this->guard($slug);
             $instanceData = $this->getInstanceDataByName($instanceName, $company);
-            
-            // Carregar horários de funcionamento para exibir status
-            $hours = $this->loadCompanyHours((int)$company['id']);
-            
-            // Renderizar a view
-            $data = [
-                'company' => $company,
-                'instanceName' => $instanceName,
-                'instanceData' => $instanceData,
-                'slug' => $slug,
-                'hours' => $hours
+
+            $payload = [
+                'instance_name' => (string)$instanceName,
+                'instance_data' => is_array($instanceData) ? [
+                    'instance_identifier' => (string)($instanceData['instance_identifier'] ?? $instanceData['id'] ?? $instanceName),
+                    'status' => (string)($instanceData['status'] ?? 'disconnected'),
+                    'connection_status' => (string)($instanceData['connectionStatus'] ?? 'disconnected'),
+                    'profile_name' => (string)($instanceData['profileName'] ?? ''),
+                    'profile_pic_url' => (string)($instanceData['profilePicUrl'] ?? ''),
+                    'number' => (string)($instanceData['number'] ?? $instanceData['ownerJid'] ?? ''),
+                    'token' => (string)($instanceData['token'] ?? ''),
+                ] : null,
+                'urls' => [
+                    'instances_list' => '/admin/' . rawurlencode($slug) . '/evolution',
+                    'connection_state' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/connection_state',
+                    'connect' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/connect',
+                    'restart' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/restart',
+                    'disconnect' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/disconnect',
+                    'qr_code' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/qr_code',
+                    'pairing_code' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/pairing_code',
+                    'stats' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/stats',
+                    'get_settings' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/settings',
+                    'save_settings' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/settings',
+                    'order_notification' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/order-notification',
+                    'check_conflict' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/check-notification-conflict',
+                    'customer_engagement' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/customer-engagement',
+                    'engagement_stats' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/engagement-stats',
+                    'validate_whatsapp' => '/admin/' . rawurlencode($slug) . '/evolution/instance/' . rawurlencode($instanceName) . '/validate-whatsapp',
+                ],
             ];
-            
-            $this->render('admin/evolution/instance_config', $data);
-            
+
+            \App\Services\AdminStoreSpaRenderer::render((string)$slug, $company, '__ADMIN_STORE_EVOLUTION_INSTANCE__', $payload);
         } catch (Exception $e) {
             error_log("Erro no AdminEvolutionInstanceController::config(): " . $e->getMessage());
             http_response_code(500);
@@ -1861,9 +1874,9 @@ class AdminEvolutionInstanceController extends Controller
         }
 
         try {
-            $stmt = $pdo->prepare("SHOW COLUMNS FROM customer_engagement_config LIKE ?");
-            $stmt->execute([$columnName]);
-            $columnCache[$columnName] = (bool)$stmt->fetch(\PDO::FETCH_ASSOC);
+            $safe = preg_replace('/[^a-zA-Z0-9_]/', '', (string)$columnName);
+            $stmt = $pdo->query("SHOW COLUMNS FROM customer_engagement_config LIKE '" . $safe . "'");
+            $columnCache[$columnName] = $stmt !== false && (bool)$stmt->fetch(\PDO::FETCH_ASSOC);
         } catch (Exception $e) {
             $columnCache[$columnName] = false;
         }

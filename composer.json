@@ -39,7 +39,6 @@
       "app/middleware/InputValidator.php",
       "app/middleware/AuthenticationSystem.php",
       "app/middleware/Authorization.php",
-      "app/middleware/SessionManager.php",
       "app/middleware/ApiSecurity.php",
       "app/middleware/FileUploadSecurity.php",
       "app/middleware/AuditLogger.php",

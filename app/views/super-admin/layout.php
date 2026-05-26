@@ -184,6 +184,22 @@ $_saUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
         Nova Loja
       </a>
+      <div class="sb-section">Operação e Segurança</div>
+      <a class="nav-item <?= ($_saUri === '/superadmin/observability') ? 'active' : '' ?>"
+         href="<?= htmlspecialchars(base_url('superadmin/observability'), ENT_QUOTES, 'UTF-8') ?>">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13h4l3 8 4-16 3 8h4"/></svg>
+        Observabilidade
+      </a>
+      <a class="nav-item <?= ($_saUri === '/superadmin/events') ? 'active' : '' ?>"
+         href="<?= htmlspecialchars(base_url('superadmin/events'), ENT_QUOTES, 'UTF-8') ?>">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-3 3-3-3z"/></svg>
+        Eventos
+      </a>
+      <a class="nav-item <?= ($_saUri === '/superadmin/billing') ? 'active' : '' ?>"
+         href="<?= htmlspecialchars(base_url('superadmin/billing'), ENT_QUOTES, 'UTF-8') ?>">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-10v12m9-6a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Billing SaaS
+      </a>
     </nav>
     <div class="sb-footer">
       <form method="post" action="<?= htmlspecialchars(base_url('superadmin/logout'), ENT_QUOTES, 'UTF-8') ?>">

@@ -54,13 +54,13 @@ $cleanUrl = function($url) {
 
 <!-- HEADER -->
 <header class="mb-6 flex flex-wrap items-center gap-3">
-  <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl admin-gradient-bg text-white shadow-sm flex-shrink-0">
+  <span class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 flex-shrink-0">
     <?= $pageIcon ?>
   </span>
   <div class="flex-1 min-w-0">
-    <h1 class="admin-gradient-text bg-clip-text text-2xl font-semibold text-transparent truncate"><?= e($pageTitle) ?></h1>
+    <h1 class="text-2xl font-semibold text-zinc-800 truncate"><?= e($pageTitle) ?></h1>
     <?php if ($pageDescription): ?>
-      <p class="text-sm text-slate-500"><?= $pageDescription ?></p>
+      <p class="text-sm text-zinc-500"><?= $pageDescription ?></p>
     <?php endif; ?>
   </div>
   
@@ -71,12 +71,12 @@ $cleanUrl = function($url) {
     <?php endif; ?>
     <?php foreach ($actions as $actionItem): ?>
       <?php if (!empty($actionItem['onclick'])): ?>
-        <button onclick="<?= e($actionItem['onclick']) ?>" class="inline-flex items-center gap-2 rounded-xl <?= !empty($actionItem['primary']) ? 'admin-gradient-bg text-white font-medium shadow-sm hover:opacity-95' : 'border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50' ?> px-4 py-2.5 text-sm transition">
+        <button onclick="<?= e($actionItem['onclick']) ?>" class="inline-flex items-center gap-2 rounded-lg <?= !empty($actionItem['primary']) ? 'bg-zinc-900 text-white font-medium hover:bg-zinc-800' : 'border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50' ?> px-4 py-2 text-sm transition">
           <?php if (!empty($actionItem['icon'])): ?><?= $actionItem['icon'] ?><?php endif; ?>
           <?= e($actionItem['label']) ?>
         </button>
       <?php else: ?>
-        <a href="<?= e($actionItem['url'] ?? '#') ?>" class="inline-flex items-center gap-2 rounded-xl <?= !empty($actionItem['primary']) ? 'admin-gradient-bg text-white font-medium shadow-sm hover:opacity-95' : 'border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50' ?> px-4 py-2.5 text-sm transition">
+        <a href="<?= e($actionItem['url'] ?? '#') ?>" class="inline-flex items-center gap-2 rounded-lg <?= !empty($actionItem['primary']) ? 'bg-zinc-900 text-white font-medium hover:bg-zinc-800' : 'border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50' ?> px-4 py-2 text-sm transition">
           <?php if (!empty($actionItem['icon'])): ?><?= $actionItem['icon'] ?><?php endif; ?>
           <?= e($actionItem['label']) ?>
         </a>

@@ -52,7 +52,12 @@ export function useSystemData() {
       return unwrap(response)
     },
     staleTime: STALE_TIMES.SYSTEM,
-    refetchInterval: STALE_TIMES.SYSTEM,
+    refetchInterval: () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return false
+      }
+      return STALE_TIMES.SYSTEM
+    },
   })
 }
 

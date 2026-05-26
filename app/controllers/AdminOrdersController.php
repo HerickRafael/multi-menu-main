@@ -9,8 +9,10 @@ require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../modules/auth/AdminGuard.php';
 require_once __DIR__ . '/../modules/orders/OrderListService.php';
 require_once __DIR__ . '/../modules/orders/OrderDetailsService.php';
+require_once __DIR__ . '/../modules/orders/OrderStatusService.php';
 require_once __DIR__ . '/../services/OrderNotificationService.php';
 require_once __DIR__ . '/../services/ThermalReceipt.php';
+require_once __DIR__ . '/../services/IFoodService.php';
 
 class AdminOrdersController extends Controller
 {
@@ -20,25 +22,192 @@ class AdminOrdersController extends Controller
         return AdminGuard::requireCompanyAccess($slug);
     }
 
+    private function buildOrdersList(int $companyId, ?string $status, ?string $source, ?string $search): array
+    {
+        $db = $this->db();
+
+        // Mapeamento de status UI → status iFood
+        $ifoodStatusMap = [
+            'pending'    => 'PLACED',
+            'confirmed'  => 'CONFIRMED',
+            'ready'      => 'READY_TO_PICKUP',
+            'dispatched' => 'DISPATCHED',
+            'completed'  => 'CONCLUDED',
+            'canceled'   => 'CANCELLED',
+        ];
+
+        // Mapeamento de status iFood → status UI normalizado
+        $ifoodNormalizeMap = [
+            'PLACED'          => 'pending',
+            'CONFIRMED'       => 'confirmed',
+            'READY_TO_PICKUP' => 'ready',
+            'DISPATCHED'      => 'dispatched',
+            'CONCLUDED'       => 'completed',
+            'CANCELLED'       => 'canceled',
+        ];
+
+        // Mapeamento de status UI → DB status para pedidos regulares
+        $regularStatusMap = [
+            'pending'    => 'pending',
+            'confirmed'  => 'paid',
+            'ready'      => 'paid',
+            'dispatched' => 'paid',
+            'completed'  => 'completed',
+            'canceled'   => 'canceled',
+        ];
+
+        $includeRegular = $source !== 'ifood';
+        $includeIfood   = $source === null || $source === 'ifood';
+
+        $allOrders = [];
+
+        // ── Pedidos regulares ────────────────────────────────────────────────
+        if ($includeRegular) {
+            $dbStatus = $status !== null ? ($regularStatusMap[$status] ?? $status) : null;
+            $result = OrderListService::listForCompany($db, $companyId, [
+                'status'         => $dbStatus,
+                'source'         => $source,
+                'exclude_source' => ($includeIfood && $source === null) ? 'ifood' : null,
+                'search'         => $search,
+                'page'           => 1,
+                'per_page'       => 200,
+            ]);
+            foreach ($result['orders'] as $o) {
+                $rawStatus = (string)($o['status'] ?? 'pending');
+                $allOrders[] = [
+                    'id'             => (int)($o['id'] ?? 0),
+                    'display_id'     => '#' . ($o['order_number'] ?? $o['id'] ?? 0),
+                    'source'         => (string)($o['source'] ?? 'manual'),
+                    'is_ifood'       => false,
+                    'customer_name'  => (string)($o['customer_name'] ?? '-'),
+                    'customer_phone' => (string)($o['customer_phone'] ?? ''),
+                    'status'         => $rawStatus,
+                    'status_raw'     => $rawStatus,
+                    'total'          => (float)($o['total'] ?? 0),
+                    'created_at'     => (string)($o['created_at'] ?? ''),
+                    'items_count'    => (int)($o['items_qty'] ?? $o['items_count'] ?? 0),
+                    'order_type'     => null,
+                    'delivered_by'   => null,
+                    'ifood_row_id'   => null,
+                    'local_order_id' => null,
+                ];
+            }
+        }
+
+        // ── Pedidos iFood ────────────────────────────────────────────────────
+        if ($includeIfood) {
+            $ifoodStatus = $status !== null ? ($ifoodStatusMap[$status] ?? null) : null;
+            $ifoodService = new IFoodService($db, $companyId);
+            $ifoodRaw = $ifoodService->getOrders($ifoodStatus, 200);
+            foreach ($ifoodRaw as $o) {
+                $rawIfoodStatus = (string)($o['status'] ?? 'PLACED');
+                $normalizedStatus = $ifoodNormalizeMap[$rawIfoodStatus] ?? 'pending';
+
+                if ($search !== null) {
+                    $haystack = strtolower(
+                        ($o['ifood_display_id'] ?? '') . ' ' .
+                        ($o['customer_name'] ?? '') . ' ' .
+                        ($o['customer_phone'] ?? '')
+                    );
+                    if (!str_contains($haystack, strtolower($search))) {
+                        continue;
+                    }
+                }
+
+                $allOrders[] = [
+                    'id'             => (int)($o['id'] ?? 0),
+                    'display_id'     => (string)($o['ifood_display_id'] ?? ('IF-' . ($o['id'] ?? 0))),
+                    'source'         => 'ifood',
+                    'is_ifood'       => true,
+                    'customer_name'  => (string)($o['customer_name'] ?? '-'),
+                    'customer_phone' => (string)($o['customer_phone'] ?? ''),
+                    'status'         => $normalizedStatus,
+                    'status_raw'     => $rawIfoodStatus,
+                    'total'          => (float)($o['total_amount'] ?? 0),
+                    'created_at'     => (string)($o['created_at'] ?? ''),
+                    'items_count'    => 0,
+                    'order_type'     => (string)($o['order_type'] ?? ''),
+                    'delivered_by'   => (string)($o['delivered_by'] ?? ''),
+                    'ifood_row_id'   => (int)($o['id'] ?? 0),
+                    'local_order_id' => isset($o['local_order_id']) ? (int)$o['local_order_id'] : null,
+                ];
+            }
+        }
+
+        usort($allOrders, static function (array $a, array $b): int {
+            return strcmp($b['created_at'], $a['created_at']);
+        });
+
+        return $allOrders;
+    }
+
+    public function poll($params)
+    {
+        $slug = (string)($params['slug'] ?? '');
+        [$u, $company] = $this->guard($slug);
+
+        $status = isset($_GET['status']) && $_GET['status'] !== '' ? (string)$_GET['status'] : null;
+        $source = isset($_GET['source']) && $_GET['source'] !== '' ? (string)$_GET['source'] : null;
+        $search = isset($_GET['q'])      && $_GET['q']      !== '' ? (string)$_GET['q']      : null;
+
+        $orders = $this->buildOrdersList((int)$company['id'], $status, $source, $search);
+
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        echo json_encode([
+            'orders' => $orders,
+            'server_time' => gmdate('c'),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
     public function index($params)
     {
         $slug = $params['slug'];
         [$u, $company] = $this->guard($slug);
         $db = $this->db();
+        $forceLegacy = (string)($_GET['legacy'] ?? '') === '1';
 
-        $result = OrderListService::listForCompany($db, (int)$company['id'], [
-            'status' => $_GET['status'] ?? null,
-            'source' => $_GET['source'] ?? null,
-            'search' => $_GET['q'] ?? null,
-            'page' => (int)($_GET['page'] ?? 1),
-            'per_page' => (int)($_GET['per_page'] ?? 10),
-        ]);
+        $status = isset($_GET['status']) && $_GET['status'] !== '' ? (string)$_GET['status'] : null;
+        $source = isset($_GET['source']) && $_GET['source'] !== '' ? (string)$_GET['source'] : null;
+        $search = isset($_GET['q'])      && $_GET['q']      !== '' ? (string)$_GET['q']      : null;
 
-        $orders = $result['orders'];
-        $status = $result['filters']['status'];
-        $source = $result['filters']['source'];
-        $search = $result['filters']['search'];
-        $pagination = $result['pagination'];
+        $allOrders = $this->buildOrdersList((int)$company['id'], $status, $source, $search);
+
+        if (!$forceLegacy) {
+            $payload = [
+                'orders'         => $allOrders,
+                'current_status' => $status,
+                'current_source' => $source,
+                'status_labels'  => [
+                    'pending'    => 'Novo',
+                    'confirmed'  => 'Confirmado',
+                    'ready'      => 'Pronto',
+                    'dispatched' => 'Em Entrega',
+                    'completed'  => 'Concluído',
+                    'canceled'   => 'Cancelado',
+                ],
+                'urls' => [
+                    'list'              => '/admin/' . rawurlencode($slug) . '/orders',
+                    'create'            => '/admin/' . rawurlencode($slug) . '/orders/create',
+                    'show_base'         => '/admin/' . rawurlencode($slug) . '/orders/show?id=',
+                    'edit_base'         => '/admin/' . rawurlencode($slug) . '/orders/',
+                    'ifood_action_base' => '/admin/' . rawurlencode($slug) . '/ifood/orders/',
+                    'ifood_poll'        => '/admin/' . rawurlencode($slug) . '/ifood/poll',
+                    'ifood_config'      => '/admin/' . rawurlencode($slug) . '/ifood/config',
+                    'local_order_base'  => '/admin/' . rawurlencode($slug) . '/orders/show?id=',
+                    'poll'              => '/admin/' . rawurlencode($slug) . '/orders/poll',
+                    'notification_sound' => '/audio/notification.mp3',
+                ],
+            ];
+
+            \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_ORDERS__', $payload);
+            return;
+        }
+
+        // Legacy view (fallback)
+        $orders   = $allOrders;
+        $pagination = ['page' => 1, 'perPage' => count($orders), 'total' => count($orders), 'totalPages' => 1];
 
         return $this->view('admin/orders/index', [
             'orders'      => $orders,
@@ -74,18 +243,126 @@ class AdminOrdersController extends Controller
         $paymentMethodMeta = $details['paymentMethodMeta'];
         $paymentMethodInstructions = $details['paymentMethodInstructions'];
         $orderEvents = $details['orderEvents'];
+        $forceLegacy = (string)($_GET['legacy'] ?? '') === '1';
 
-        return $this->view('admin/orders/show', [
-            'order'                     => $order,
-            'ifoodData'                 => $ifoodData,
-            'paymentMethodName'         => $paymentMethodName,
-            'paymentMethodType'         => $paymentMethodType,
-            'paymentMethodMeta'         => $paymentMethodMeta,
-            'paymentMethodInstructions' => $paymentMethodInstructions,
-            'orderEvents'               => $orderEvents,
-            'company'                   => $company,
-            'activeSlug'                => $company['slug'],
-        ]);
+        if ($forceLegacy) {
+            return $this->view('admin/orders/show', [
+                'order'                     => $order,
+                'ifoodData'                 => $ifoodData,
+                'paymentMethodName'         => $paymentMethodName,
+                'paymentMethodType'         => $paymentMethodType,
+                'paymentMethodMeta'         => $paymentMethodMeta,
+                'paymentMethodInstructions' => $paymentMethodInstructions,
+                'orderEvents'               => $orderEvents,
+                'company'                   => $company,
+                'activeSlug'                => $company['slug'],
+            ]);
+        }
+
+        // ── Build SPA payload ─────────────────────────────────────────────────
+        $decodeJson = static function ($value) {
+            if (is_array($value)) return $value;
+            if (!is_string($value) || $value === '') return null;
+            $decoded = json_decode($value, true);
+            return is_array($decoded) ? $decoded : null;
+        };
+
+        $items = is_array($order['items'] ?? null) ? $order['items'] : [];
+        $itemsPayload = [];
+        foreach ($items as $it) {
+            $itemsPayload[] = [
+                'id'                  => isset($it['id']) ? (int)$it['id'] : null,
+                'product_name'        => (string)($it['product_name'] ?? ''),
+                'quantity'            => (int)($it['quantity'] ?? 0),
+                'unit_price'          => (float)($it['unit_price'] ?? 0),
+                'line_total'          => (float)($it['line_total'] ?? 0),
+                'notes'               => (string)($it['notes'] ?? ''),
+                'combo_data'          => $decodeJson($it['combo_data'] ?? null),
+                'customization_data'  => $decodeJson($it['customization_data'] ?? null),
+            ];
+        }
+
+        $ifoodPayload = null;
+        if (is_array($ifoodData) && !empty($ifoodData)) {
+            $ifoodPayload = [
+                'ifood_order_id'      => (string)($ifoodData['ifood_order_id'] ?? ($order['ifood_order_id'] ?? '')),
+                'ifood_display_id'    => (string)($ifoodData['ifood_display_id'] ?? ''),
+                'status'              => (string)($ifoodData['status'] ?? ''),
+                'order_type'          => (string)($ifoodData['order_type'] ?? ''),
+                'order_timing'        => (string)($ifoodData['order_timing'] ?? ''),
+                'scheduled_datetime'  => $ifoodData['scheduled_datetime'] ?? null,
+                'customer_document'   => $ifoodData['customer_document'] ?? null,
+                'pickup_code'         => $ifoodData['pickup_code'] ?? null,
+                'delivered_by'        => $ifoodData['delivered_by'] ?? null,
+                'delivery_address'    => $decodeJson($ifoodData['delivery_address'] ?? null),
+                'payments'            => $decodeJson($ifoodData['payments'] ?? null),
+                'benefits'            => $decodeJson($ifoodData['benefits'] ?? null),
+                'raw_data'            => $decodeJson($ifoodData['raw_data'] ?? null),
+                'cancellation_reason' => $ifoodData['cancellation_reason'] ?? null,
+                'created_at'          => $ifoodData['created_at'] ?? null,
+            ];
+        }
+
+        // WhatsApp link
+        $wa = null;
+        if (!empty($order['customer_phone'])) {
+            $digits = preg_replace('/\D+/', '', (string)$order['customer_phone']);
+            if ($digits) {
+                if (!str_starts_with($digits, '55')) {
+                    $digits = '55' . $digits;
+                }
+                $orderNumber = (int)($order['order_number'] ?? $order['id'] ?? 0);
+                $waText = rawurlencode('Olá! Sobre o pedido #' . $orderNumber . '.');
+                $wa = "https://wa.me/{$digits}?text={$waText}";
+            }
+        }
+
+        $orderId = (int)($order['id'] ?? 0);
+        $payload = [
+            'order' => [
+                'id'                  => $orderId,
+                'order_number'        => (int)($order['order_number'] ?? $order['id'] ?? 0),
+                'status'              => (string)($order['status'] ?? 'pending'),
+                'source'              => (string)($order['source'] ?? 'manual'),
+                'customer_name'       => (string)($order['customer_name'] ?? ''),
+                'customer_phone'      => (string)($order['customer_phone'] ?? ''),
+                'customer_address'    => (string)($order['customer_address'] ?? ''),
+                'notes'               => (string)($order['notes'] ?? ''),
+                'subtotal'            => (float)($order['subtotal'] ?? 0),
+                'delivery_fee'        => (float)($order['delivery_fee'] ?? 0),
+                'discount'            => (float)($order['discount'] ?? 0),
+                'loyalty_discount'    => (float)($order['loyalty_discount'] ?? 0),
+                'total'               => (float)($order['total'] ?? 0),
+                'payment_method_id'   => isset($order['payment_method_id']) ? (int)$order['payment_method_id'] : null,
+                'created_at'          => (string)($order['created_at'] ?? ''),
+                'ifood_order_id'      => $order['ifood_order_id'] ?? null,
+                'items'               => $itemsPayload,
+            ],
+            'payment' => [
+                'name'         => $paymentMethodName,
+                'type'         => $paymentMethodType,
+                'meta'         => is_string($paymentMethodMeta) ? $decodeJson($paymentMethodMeta) : $paymentMethodMeta,
+                'instructions' => $paymentMethodInstructions,
+            ],
+            'ifood'          => $ifoodPayload,
+            'events'         => $orderEvents,
+            'status_labels'  => [
+                'pending'   => 'Pendente',
+                'completed' => 'Concluído',
+                'canceled'  => 'Cancelado',
+            ],
+            'whatsapp_url'   => $wa,
+            'urls' => [
+                'list'       => '/admin/' . rawurlencode($slug) . '/orders',
+                'set_status' => '/admin/' . rawurlencode($slug) . '/orders/setStatus',
+                'edit'       => '/admin/' . rawurlencode($slug) . '/orders/' . $orderId . '/edit',
+                'delete'     => '/admin/' . rawurlencode($slug) . '/orders/' . $orderId . '/del',
+                'print'      => '/admin/' . rawurlencode($slug) . '/orders/print?id=' . $orderId,
+                'legacy'     => '/admin/' . rawurlencode($slug) . '/orders/show?id=' . $orderId . '&legacy=1',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_ORDER__', $payload);
     }
 
     public function edit($params)
@@ -295,27 +572,110 @@ class AdminOrdersController extends Controller
                 'product_id' => (int)($item['product_id'] ?? 0),
                 'quantity' => (int)($item['quantity'] ?? 0),
                 'unit_price' => (float)($item['unit_price'] ?? 0),
-                'product_name' => $item['product_name'] ?? '',
-                'customization_data' => $customData,
+                'product_name' => (string)($item['product_name'] ?? ''),
+                'customization_data' => is_array($customData) ? $customData : null,
             ];
         }
 
-        return $this->view('admin/orders/form', [
-            'products' => $products,
-            'categories' => $categories,
-            'customers' => $customers,
-            'cities' => $cities,
-            'zonesByCity' => $zonesByCity,
-            'paymentMethods' => $paymentMethods,
+        $forceLegacy = (string)($_GET['legacy'] ?? '') === '1';
+        if ($forceLegacy) {
+            return $this->view('admin/orders/form', [
+                'products' => $products,
+                'categories' => $categories,
+                'customers' => $customers,
+                'cities' => $cities,
+                'zonesByCity' => $zonesByCity,
+                'paymentMethods' => $paymentMethods,
+                'defaults' => $defaults,
+                'prefill' => $prefill,
+                'company' => $company,
+                'activeSlug' => $company['slug'],
+                'customizationMap' => $customizationMap,
+                'isEdit' => true,
+                'order' => $order,
+                'initialItems' => $initialItems,
+            ]);
+        }
+
+        $slugEnc = rawurlencode((string)$company['slug']);
+        $payload = [
+            'is_edit' => true,
+            'order_id' => (int)$order['id'],
+            'order_number' => (int)($order['order_number'] ?? $order['id']),
+            'products' => array_map(static function (array $p): array {
+                return [
+                    'id' => (int)$p['id'],
+                    'name' => (string)($p['name'] ?? ''),
+                    'description' => (string)($p['description'] ?? ''),
+                    'sku' => (string)($p['sku'] ?? ''),
+                    'price' => isset($p['price']) ? (float)$p['price'] : 0.0,
+                    'promo_price' => isset($p['promo_price']) && $p['promo_price'] !== null && $p['promo_price'] !== ''
+                        ? (float)$p['promo_price']
+                        : null,
+                    'category_id' => isset($p['category_id']) && $p['category_id'] !== null
+                        ? (int)$p['category_id']
+                        : null,
+                    'category_name' => (string)($p['category_name'] ?? ''),
+                    'image' => (string)($p['image'] ?? ''),
+                    'type' => (string)($p['type'] ?? 'simple'),
+                    'active' => (int)($p['active'] ?? 0) === 1,
+                ];
+            }, $products),
+            'categories' => array_map(static function (array $c): array {
+                return ['id' => (int)$c['id'], 'name' => (string)($c['name'] ?? '')];
+            }, $categories),
+            'customers' => array_map(static function (array $c): array {
+                return [
+                    'id' => (int)$c['id'],
+                    'name' => (string)($c['name'] ?? ''),
+                    'whatsapp' => (string)($c['whatsapp'] ?? ''),
+                ];
+            }, $customers),
+            'cities' => array_map(static function (array $c): array {
+                return ['id' => (int)$c['id'], 'name' => (string)($c['name'] ?? '')];
+            }, $cities),
+            'zones_by_city' => array_map(static function (array $list): array {
+                return array_map(static function (array $z): array {
+                    return [
+                        'id' => (int)$z['id'],
+                        'city_id' => (int)$z['city_id'],
+                        'neighborhood' => (string)($z['neighborhood'] ?? ''),
+                        'fee' => (float)($z['fee'] ?? 0),
+                    ];
+                }, $list);
+            }, $zonesByCity),
+            'payment_methods' => array_map(static function (array $pm): array {
+                return [
+                    'id' => (int)$pm['id'],
+                    'name' => (string)($pm['name'] ?? ''),
+                    'type' => (string)($pm['type'] ?? ''),
+                ];
+            }, $paymentMethods),
             'defaults' => $defaults,
-            'prefill' => $prefill,
-            'company' => $company,
-            'activeSlug' => $company['slug'],
-            'customizationMap' => $customizationMap,
-            'isEdit' => true,
-            'order' => $order,
-            'initialItems' => $initialItems,
-        ]);
+            'prefill' => [
+                'customer_name' => (string)$prefill['customer_name'],
+                'customer_phone' => (string)$prefill['customer_phone'],
+                'notes' => (string)$prefill['notes'],
+                'delivery_fee' => (float)$prefill['delivery_fee'],
+                'discount' => (float)$prefill['discount'],
+                'delivery_type' => (string)$prefill['delivery_type'],
+                'street' => (string)$prefill['street'],
+                'number' => (string)$prefill['number'],
+                'complement' => (string)$prefill['complement'],
+                'city_id' => $prefill['city_id'],
+                'zone_id' => $prefill['zone_id'],
+                'payment_method_id' => $prefill['payment_method_id'] !== null ? (int)$prefill['payment_method_id'] : null,
+                'cash_amount' => $prefill['cash_amount'],
+                'items' => $initialItems,
+            ],
+            'urls' => [
+                'list' => '/admin/' . $slugEnc . '/orders',
+                'submit' => '/admin/' . $slugEnc . '/orders/' . (int)$order['id'],
+                'show' => '/admin/' . $slugEnc . '/orders/show?id=' . (int)$order['id'],
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render((string)$company['slug'], $company, '__ADMIN_STORE_ORDER_FORM__', $payload);
     }
 
     public function setStatus($params)
@@ -327,12 +687,15 @@ class AdminOrdersController extends Controller
         $orderId = (int)($_POST['id'] ?? 0);
         $status  = $_POST['status'] ?? '';
 
-        if (Order::updateStatus($db, $orderId, (int)$company['id'], $status)) {
+        $result = OrderStatusService::updateForCompany($db, (int)$company['id'], $orderId, $status);
+
+        if (!empty($result['ok'])) {
             header('Location: ' . base_url('admin/' . rawurlencode($company['slug']) . '/orders/show?id=' . $orderId));
             exit;
         }
+
         http_response_code(400);
-        echo 'Não foi possível atualizar o status';
+        echo $result['error'] ?? 'Não foi possível atualizar o status';
     }
 
     public function create($params)
@@ -396,18 +759,64 @@ class AdminOrdersController extends Controller
             'discount'       => 0,
         ];
 
-        return $this->view('admin/orders/form', [
-            'products'         => $products,
-            'categories'       => $categories,
-            'customers'        => $customers,
-            'cities'           => $cities,
-            'zonesByCity'      => $zonesByCity,
-            'paymentMethods'   => $paymentMethods,
-            'defaults'         => $defaults,
-            'company'          => $company,
-            'activeSlug'       => $company['slug'],
-            'customizationMap' => $customizationMap,
-        ]);
+        $payload = [
+            'products' => array_map(static function (array $p): array {
+                return [
+                    'id' => (int)$p['id'],
+                    'name' => (string)($p['name'] ?? ''),
+                    'description' => (string)($p['description'] ?? ''),
+                    'sku' => (string)($p['sku'] ?? ''),
+                    'price' => isset($p['price']) ? (float)$p['price'] : 0.0,
+                    'promo_price' => isset($p['promo_price']) && $p['promo_price'] !== null && $p['promo_price'] !== ''
+                        ? (float)$p['promo_price']
+                        : null,
+                    'category_id' => isset($p['category_id']) && $p['category_id'] !== null
+                        ? (int)$p['category_id']
+                        : null,
+                    'category_name' => (string)($p['category_name'] ?? ''),
+                    'image' => (string)($p['image'] ?? ''),
+                    'type' => (string)($p['type'] ?? 'simple'),
+                    'active' => (int)($p['active'] ?? 0) === 1,
+                ];
+            }, $products),
+            'categories' => array_map(static function (array $c): array {
+                return ['id' => (int)$c['id'], 'name' => (string)($c['name'] ?? '')];
+            }, $categories),
+            'customers' => array_map(static function (array $c): array {
+                return [
+                    'id' => (int)$c['id'],
+                    'name' => (string)($c['name'] ?? ''),
+                    'whatsapp' => (string)($c['whatsapp'] ?? ''),
+                ];
+            }, $customers),
+            'cities' => array_map(static function (array $c): array {
+                return ['id' => (int)$c['id'], 'name' => (string)($c['name'] ?? '')];
+            }, $cities),
+            'zones_by_city' => array_map(static function (array $list): array {
+                return array_map(static function (array $z): array {
+                    return [
+                        'id' => (int)$z['id'],
+                        'city_id' => (int)$z['city_id'],
+                        'neighborhood' => (string)($z['neighborhood'] ?? ''),
+                        'fee' => (float)($z['fee'] ?? 0),
+                    ];
+                }, $list);
+            }, $zonesByCity),
+            'payment_methods' => array_map(static function (array $pm): array {
+                return [
+                    'id' => (int)$pm['id'],
+                    'name' => (string)($pm['name'] ?? ''),
+                    'type' => (string)($pm['type'] ?? ''),
+                ];
+            }, $paymentMethods),
+            'defaults' => $defaults,
+            'urls' => [
+                'list' => '/admin/' . rawurlencode((string)$company['slug']) . '/orders',
+                'submit' => '/admin/' . rawurlencode((string)$company['slug']) . '/orders',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render((string)$company['slug'], $company, '__ADMIN_STORE_ORDER_FORM__', $payload);
     }
 
     public function store($params)

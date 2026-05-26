@@ -15,16 +15,17 @@ import { useAuthStore } from '@/js/stores/authStore'
 function SidebarBrand({ collapsed }: { collapsed: boolean }) {
   return (
     <div className={cn(
-      'flex items-center gap-2 px-3 py-4 border-b border-sidebar-border',
+      'flex items-center gap-3 px-3 py-4 border-b border-sidebar-border',
+      'transition-all duration-300 ease-in-out',
       collapsed ? 'justify-center px-2' : 'px-4',
     )}>
-      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-        <span className="text-sidebar-primary-foreground font-bold text-sm">SA</span>
+      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+        <span className="text-primary-foreground font-bold text-sm">MM</span>
       </div>
       {!collapsed && (
-        <div className="overflow-hidden">
-          <p className="text-sm font-semibold text-sidebar-foreground truncate">Super Admin</p>
-          <p className="text-xs text-muted-foreground truncate">Multi Menu Platform</p>
+        <div className="overflow-hidden flex-1 transition-opacity duration-300">
+          <p className="text-sm font-semibold text-sidebar-foreground truncate">Multi Menu</p>
+          <p className="text-xs text-muted-foreground truncate">Admin</p>
         </div>
       )}
     </div>
@@ -180,8 +181,8 @@ export const AppSidebar = memo(function AppSidebar({ mode = 'platform' }: AppSid
     <TooltipProvider>
       <aside
         className={cn(
-          'relative flex flex-col h-screen bg-sidebar border-r border-sidebar-border sidebar-transition',
-          'flex-shrink-0 overflow-hidden',
+          'relative flex flex-col h-screen bg-[#efefef] border-none',
+          'flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out',
           sidebarCollapsed ? 'w-[56px]' : 'w-[240px]',
         )}
       >
@@ -221,11 +222,12 @@ export const AppSidebar = memo(function AppSidebar({ mode = 'platform' }: AppSid
           <button
             onClick={toggleSidebar}
             className={cn(
-              'flex w-full items-center rounded-md p-2 text-xs text-muted-foreground',
-              'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors',
+              'flex w-full items-center rounded-md px-2 py-2 text-xs text-muted-foreground',
+              'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200',
               sidebarCollapsed ? 'justify-center' : 'gap-2',
             )}
             aria-label={sidebarCollapsed ? 'Expandir sidebar' : 'Recolher sidebar'}
+            title={sidebarCollapsed ? 'Expandir' : 'Recolher'}
           >
             {sidebarCollapsed
               ? <ChevronRight className="h-4 w-4" />

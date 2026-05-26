@@ -142,25 +142,50 @@ class AdminDeliveryFeeController extends Controller
         $success   = $options['success'] ?? $this->resolveSuccessFromQuery();
         $error     = $options['error'] ?? null;
 
-        return $this->view('admin/delivery-fees/index', [
-          'company'      => $company,
-          'cities'       => $cities,
-          'zones'        => $zones,
-          'cityErrors'   => $cityErrors,
-          'zoneErrors'   => $zoneErrors,
-          'optionErrors' => $optionErrors,
-          'bulkErrors'   => $bulkErrors,
-          'oldCity'      => $oldCity,
-          'oldZone'      => $oldZone,
-          'citySearch'   => $citySearch,
-          'zoneSearch'   => $zoneSearch,
-          'editCityId'   => $editCityId,
-          'editZoneId'   => $editZoneId,
-          'optionValues' => $optionValues,
-          'bulkValue'    => $bulkValue,
-          'success'      => $success,
-          'error'        => $error,
-        ]);
+        $slug = (string)$company['slug'];
+
+        $payload = [
+            'cities' => array_map(static function (array $c): array {
+                return [
+                    'id' => (int)$c['id'],
+                    'name' => (string)($c['name'] ?? ''),
+                ];
+            }, $cities),
+            'zones' => array_map(static function (array $z): array {
+                return [
+                    'id' => (int)$z['id'],
+                    'city_id' => (int)$z['city_id'],
+                    'city_name' => (string)($z['city_name'] ?? ''),
+                    'neighborhood' => (string)($z['neighborhood'] ?? ''),
+                    'fee' => (float)($z['fee'] ?? 0),
+                ];
+            }, $zones),
+            'options' => [
+                'after_hours_fee' => (float)($optionValues['after_hours_fee'] ?? 0),
+                'free_delivery' => (int)($optionValues['free_delivery'] ?? 0) === 1,
+            ],
+            'errors' => [
+                'city' => array_values(array_map('strval', $cityErrors)),
+                'zone' => array_values(array_map('strval', $zoneErrors)),
+                'option' => array_values(array_map('strval', $optionErrors)),
+                'bulk' => array_values(array_map('strval', $bulkErrors)),
+            ],
+            'flash' => ['success' => $success, 'error' => $error],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/delivery-fees',
+                'cities_store' => '/admin/' . rawurlencode($slug) . '/delivery-fees/cities',
+                'cities_update_base' => '/admin/' . rawurlencode($slug) . '/delivery-fees/cities/',
+                'cities_destroy_base' => '/admin/' . rawurlencode($slug) . '/delivery-fees/cities/',
+                'zones_store' => '/admin/' . rawurlencode($slug) . '/delivery-fees/zones',
+                'zones_update_base' => '/admin/' . rawurlencode($slug) . '/delivery-fees/zones/',
+                'zones_destroy_base' => '/admin/' . rawurlencode($slug) . '/delivery-fees/zones/',
+                'zones_adjust' => '/admin/' . rawurlencode($slug) . '/delivery-fees/zones/adjust',
+                'options' => '/admin/' . rawurlencode($slug) . '/delivery-fees/options',
+                'free_shipping' => '/admin/' . rawurlencode($slug) . '/delivery-fees/free-shipping',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_DELIVERY_FEES__', $payload);
     }
 
     /** GET /delivery-fees */

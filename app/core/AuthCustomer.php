@@ -55,38 +55,22 @@ class AuthCustomer
     public static function current(?string $slug = null): ?array
     {
         self::start();
-        $c = $_SESSION['customer'] ?? null;
+        $customer = class_exists('Auth') ? Auth::customer($slug) : ($_SESSION['customer'] ?? null);
 
-        if (!$c) {
+        if (!$customer) {
             return null;
         }
 
-        // 🔐 Validar escopo da empresa
-        if ($slug !== null && isset($c['company_slug']) && $c['company_slug'] !== $slug) {
-            // Log de tentativa de acesso fora do escopo
+        if (function_exists('validate_session_ownership') && !validate_session_ownership((int)($customer['id'] ?? 0))) {
             if (function_exists('log_security_event')) {
-                log_security_event('customer_scope_mismatch', [
-                    'customer_id' => $c['id'] ?? null,
-                    'session_slug' => $c['company_slug'] ?? null,
-                    'requested_slug' => $slug
+                log_security_event('session_ownership_failed', [
+                    'customer_id' => $customer['id'] ?? null
                 ]);
             }
             return null;
         }
-        
-        // 🔐 Validar propriedade da sessão se disponível
-        if (function_exists('validate_session_ownership')) {
-            if (!validate_session_ownership((int)($c['id'] ?? 0))) {
-                if (function_exists('log_security_event')) {
-                    log_security_event('session_ownership_failed', [
-                        'customer_id' => $c['id'] ?? null
-                    ]);
-                }
-                return null;
-            }
-        }
 
-        return $c;
+        return $customer;
     }
 
     /**
@@ -108,13 +92,13 @@ class AuthCustomer
     public static function getCurrentId(): ?int
     {
         self::start();
-        $c = $_SESSION['customer'] ?? null;
-        
-        if (!$c) {
+        $customer = class_exists('Auth') ? Auth::customer() : ($_SESSION['customer'] ?? null);
+
+        if (!$customer) {
             return null;
         }
-        
-        return (int)($c['id'] ?? 0) ?: null;
+
+        return (int)($customer['id'] ?? 0) ?: null;
     }
     
     /**
@@ -127,7 +111,7 @@ class AuthCustomer
         self::start();
         
         // Verificar se há dados de cliente
-        if (empty($_SESSION['customer'])) {
+        if ((class_exists('Auth') ? Auth::customer() : ($_SESSION['customer'] ?? null)) === null) {
             return false;
         }
         

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../bootstrap.php';
 
 require_once __DIR__ . '/../modules/auth/MobileAdminGuard.php';
 require_once __DIR__ . '/../modules/orders/OrderListService.php';
+require_once __DIR__ . '/../modules/orders/OrderStatusService.php';
 
 /**
  * MobileAdminOrdersController
@@ -342,27 +343,21 @@ class MobileAdminOrdersController extends Controller
             return;
         }
 
-        $order = Order::find($orderId, (int)$company['id']);
-
-        if (!$order || (int)$order['company_id'] !== (int)$company['id']) {
-            $this->jsonResponse(['success' => false, 'error' => 'Pedido não encontrado']);
-            return;
-        }
-
-        // Suporta ambos os workflows (mobile/KDS e desktop/gerencial)
-        $validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'completed', 'canceled'];
-        if (!in_array($status, $validStatuses)) {
-            $this->jsonResponse(['success' => false, 'error' => 'Status inválido']);
-            return;
-        }
-
-        // Atualiza status
         $db = db();
-        Order::updateStatus($db, $orderId, (int)$company['id'], $status);
+        $result = OrderStatusService::updateForCompany($db, (int)$company['id'], $orderId, $status);
+
+        if (empty($result['ok'])) {
+            $this->jsonResponse(['success' => false, 'error' => $result['error'] ?? 'Falha ao atualizar status']);
+            return;
+        }
 
         // Se for request AJAX, retorna JSON
         if ($this->isAjax()) {
-            $this->jsonResponse(['success' => true, 'status' => $status]);
+            $this->jsonResponse([
+                'success' => true,
+                'status' => $result['requested_status'] ?? $status,
+                'internal_status' => $result['internal_status'] ?? $status,
+            ]);
             return;
         }
 

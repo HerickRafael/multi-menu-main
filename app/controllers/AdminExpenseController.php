@@ -56,11 +56,8 @@ class AdminExpenseController extends Controller
         $slug = trim((string)($params['slug'] ?? ''));
         [$user, $company] = $this->guard($slug);
         $companyId = (int)$company['id'];
-        $activeSlug = $slug;
 
         $month = $_GET['month'] ?? date('Y-m');
-
-        // Validar formato
         if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
             $month = date('Y-m');
         }
@@ -69,18 +66,62 @@ class AdminExpenseController extends Controller
         $summary = Expense::getMonthlySummary($companyId, $month);
         $categories = ExpenseCategory::listByCompany($companyId);
 
-        // Meses disponíveis
         $availableMonths = [];
         for ($i = 0; $i < 12; $i++) {
             $m = date('Y-m', strtotime("-$i months"));
-            $availableMonths[$m] = self::formatMonthName($m);
+            $availableMonths[] = ['value' => $m, 'label' => self::formatMonthName($m)];
         }
 
-        $monthLabel = self::formatMonthName($month);
-        $success = $_GET['success'] ?? null;
-        $error = $_GET['error'] ?? null;
+        $success = isset($_GET['success']) ? (string)$_GET['success'] : null;
+        $error = isset($_GET['error']) ? (string)$_GET['error'] : null;
 
-        require __DIR__ . '/../views/admin/expenses/index.php';
+        $toFloat = static fn($v) => $v === null || $v === '' ? 0.0 : (float)$v;
+        $toInt = static fn($v) => $v === null || $v === '' ? 0 : (int)$v;
+
+        $payload = [
+            'month' => $month,
+            'month_label' => self::formatMonthName($month),
+            'available_months' => $availableMonths,
+            'expenses' => array_map(static function ($e) use ($toFloat, $toInt) {
+                return [
+                    'id' => $toInt($e['id'] ?? 0),
+                    'category_id' => isset($e['category_id']) && $e['category_id'] !== null ? $toInt($e['category_id']) : null,
+                    'category_name' => (string)($e['category_name'] ?? ''),
+                    'category_type' => (string)($e['category_type'] ?? ''),
+                    'description' => (string)($e['description'] ?? ''),
+                    'amount' => $toFloat($e['amount'] ?? 0),
+                    'expense_date' => (string)($e['expense_date'] ?? ''),
+                    'reference_month' => (string)($e['reference_month'] ?? ''),
+                    'payment_method' => (string)($e['payment_method'] ?? ''),
+                    'notes' => (string)($e['notes'] ?? ''),
+                ];
+            }, $expenses),
+            'summary' => [
+                'total' => $toFloat($summary['total'] ?? 0),
+                'fixed_total' => $toFloat($summary['fixed_total'] ?? 0),
+                'variable_total' => $toFloat($summary['variable_total'] ?? 0),
+                'count' => $toInt($summary['count'] ?? count($expenses)),
+            ],
+            'categories' => array_map(static function ($c) use ($toInt) {
+                return [
+                    'id' => $toInt($c['id'] ?? 0),
+                    'name' => (string)($c['name'] ?? ''),
+                    'type' => (string)($c['type'] ?? 'fixed'),
+                    'description' => (string)($c['description'] ?? ''),
+                ];
+            }, $categories),
+            'flash' => ['success' => $success, 'error' => $error],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/expenses',
+                'create' => '/admin/' . rawurlencode($slug) . '/expenses/create',
+                'store' => '/admin/' . rawurlencode($slug) . '/expenses/store',
+                'edit_base' => '/admin/' . rawurlencode($slug) . '/expenses/',
+                'destroy_base' => '/admin/' . rawurlencode($slug) . '/expenses/',
+                'categories' => '/admin/' . rawurlencode($slug) . '/expenses/categories',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_EXPENSES__', $payload);
     }
 
     /**
@@ -91,12 +132,58 @@ class AdminExpenseController extends Controller
         $slug = trim((string)($params['slug'] ?? ''));
         [$user, $company] = $this->guard($slug);
         $companyId = (int)$company['id'];
-        $activeSlug = $slug;
-
         $categories = ExpenseCategory::listByCompany($companyId);
-        $expense = null;
 
-        require __DIR__ . '/../views/admin/expenses/form.php';
+        $this->renderExpenseFormSpa($slug, $company, null, $categories);
+    }
+
+    private function renderExpenseFormSpa(string $slug, array $company, ?array $expense, array $categories): void
+    {
+        $isEdit = $expense !== null;
+        $toFloat = static fn($v) => $v === null || $v === '' ? 0.0 : (float)$v;
+        $toInt = static fn($v) => $v === null || $v === '' ? 0 : (int)$v;
+
+        $payload = [
+            'is_edit' => $isEdit,
+            'expense' => $isEdit ? [
+                'id' => $toInt($expense['id'] ?? 0),
+                'category_id' => isset($expense['category_id']) && $expense['category_id'] !== null ? $toInt($expense['category_id']) : null,
+                'description' => (string)($expense['description'] ?? ''),
+                'amount' => $toFloat($expense['amount'] ?? 0),
+                'reference_month' => (string)($expense['reference_month'] ?? date('Y-m')),
+                'expense_date' => (string)($expense['expense_date'] ?? ''),
+                'payment_method' => (string)($expense['payment_method'] ?? ''),
+                'notes' => (string)($expense['notes'] ?? ''),
+            ] : [
+                'id' => null,
+                'category_id' => null,
+                'description' => '',
+                'amount' => 0,
+                'reference_month' => date('Y-m'),
+                'expense_date' => '',
+                'payment_method' => '',
+                'notes' => '',
+            ],
+            'categories' => array_map(static function ($c) use ($toInt) {
+                return [
+                    'id' => $toInt($c['id'] ?? 0),
+                    'name' => (string)($c['name'] ?? ''),
+                    'type' => (string)($c['type'] ?? 'fixed'),
+                ];
+            }, $categories),
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/expenses',
+                'categories' => '/admin/' . rawurlencode($slug) . '/expenses/categories',
+                'submit' => $isEdit
+                    ? '/admin/' . rawurlencode($slug) . '/expenses/' . $toInt($expense['id'] ?? 0) . '/update'
+                    : '/admin/' . rawurlencode($slug) . '/expenses/store',
+                'destroy' => $isEdit
+                    ? '/admin/' . rawurlencode($slug) . '/expenses/' . $toInt($expense['id'] ?? 0) . '/delete'
+                    : null,
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_EXPENSE_FORM__', $payload);
     }
 
     /**
@@ -151,7 +238,6 @@ class AdminExpenseController extends Controller
         $id = (int)($params['id'] ?? 0);
         [$user, $company] = $this->guard($slug);
         $companyId = (int)$company['id'];
-        $activeSlug = $slug;
 
         $expense = Expense::findForCompany($companyId, $id);
 
@@ -161,8 +247,7 @@ class AdminExpenseController extends Controller
         }
 
         $categories = ExpenseCategory::listByCompany($companyId);
-
-        require __DIR__ . '/../views/admin/expenses/form.php';
+        $this->renderExpenseFormSpa($slug, $company, $expense, $categories);
     }
 
     /**
@@ -233,14 +318,33 @@ class AdminExpenseController extends Controller
         $slug = trim((string)($params['slug'] ?? ''));
         [$user, $company] = $this->guard($slug);
         $companyId = (int)$company['id'];
-        $activeSlug = $slug;
 
         $categories = ExpenseCategory::listByCompany($companyId);
-        
-        $success = $_GET['success'] ?? null;
-        $error = $_GET['error'] ?? null;
+        $success = isset($_GET['success']) ? (string)$_GET['success'] : null;
+        $error = isset($_GET['error']) ? (string)$_GET['error'] : null;
 
-        require __DIR__ . '/../views/admin/expenses/categories.php';
+        $payload = [
+            'categories' => array_map(static function ($c): array {
+                return [
+                    'id' => (int)($c['id'] ?? 0),
+                    'name' => (string)($c['name'] ?? ''),
+                    'type' => (string)($c['type'] ?? 'fixed'),
+                    'description' => (string)($c['description'] ?? ''),
+                    'active' => (int)($c['active'] ?? 1) === 1,
+                ];
+            }, $categories),
+            'flash' => ['success' => $success, 'error' => $error],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/expenses/categories',
+                'expenses' => '/admin/' . rawurlencode($slug) . '/expenses',
+                'store' => '/admin/' . rawurlencode($slug) . '/expenses/categories/store',
+                'update_base' => '/admin/' . rawurlencode($slug) . '/expenses/categories/',
+                'destroy_base' => '/admin/' . rawurlencode($slug) . '/expenses/categories/',
+                'seed' => '/admin/' . rawurlencode($slug) . '/expenses/categories/seed',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_EXPENSE_CATEGORIES__', $payload);
     }
 
     /**

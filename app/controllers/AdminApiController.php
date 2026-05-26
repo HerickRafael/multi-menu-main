@@ -52,25 +52,84 @@ class AdminApiController extends Controller
     {
         $slug = $params['slug'] ?? '';
         [$user, $company] = $this->guard($slug);
-        
-        // Buscar tokens e chaves existentes
-        $apiData = $this->getApiData($user['id']);
-        
-        // Estatísticas da API
-        $stats = $this->getApiStats($company['id']);
 
-        $data = [
-            'title' => 'Gerenciamento de API - ' . $company['name'],
-            'company' => $company,
-            'activeSlug' => $slug,
-            'user' => $user,
-            'apiData' => $apiData,
-            'stats' => $stats,
-            'baseUrl' => base_url('api'),
-            'endpoints' => $this->getEndpointsList()
+        // Buscar tokens e chaves existentes
+        $apiData = $this->getApiData((int)$user['id']);
+
+        // Estatísticas da API
+        $stats = $this->getApiStats((int)$company['id']);
+
+        $decodeScopes = static function ($v): array {
+            if (is_array($v)) return array_values(array_map('strval', $v));
+            if (is_string($v) && $v !== '') {
+                $d = json_decode($v, true);
+                if (is_array($d)) return array_values(array_map('strval', $d));
+                return array_values(array_filter(array_map('trim', explode(',', $v))));
+            }
+            return [];
+        };
+
+        $tokens = array_map(static function (array $t) use ($decodeScopes): array {
+            return [
+                'id' => (int)($t['id'] ?? 0),
+                'access_token' => (string)($t['access_token'] ?? ''),
+                'jwt_preview' => isset($t['jwt_raw']) && $t['jwt_raw']
+                    ? substr((string)$t['jwt_raw'], 0, 32) . '...'
+                    : null,
+                'scopes' => $decodeScopes($t['scopes'] ?? []),
+                'expires_at' => $t['expires_at'] ?? null,
+                'created_at' => $t['created_at'] ?? null,
+            ];
+        }, $apiData['tokens'] ?? []);
+
+        $apiKeys = array_map(static function (array $k) use ($decodeScopes): array {
+            return [
+                'id' => (int)($k['id'] ?? 0),
+                'name' => (string)($k['name'] ?? ''),
+                'key_preview' => isset($k['key_hash']) && $k['key_hash']
+                    ? substr((string)$k['key_hash'], 0, 16) . '...'
+                    : null,
+                'scopes' => $decodeScopes($k['scopes'] ?? []),
+                'expires_at' => $k['expires_at'] ?? null,
+                'created_at' => $k['created_at'] ?? null,
+                'is_active' => (int)($k['is_active'] ?? 1) === 1,
+                'revoked_at' => $k['revoked_at'] ?? null,
+            ];
+        }, $apiData['api_keys'] ?? []);
+
+        $payload = [
+            'company_name' => (string)($company['name'] ?? ''),
+            'user_name' => (string)($user['name'] ?? ''),
+            'tokens' => $tokens,
+            'api_keys' => $apiKeys,
+            'stats' => [
+                'requests_today' => (int)($stats['requests_today'] ?? 0),
+                'total_requests' => (int)($stats['total_requests'] ?? 0),
+                'top_endpoints' => array_map(static function (array $e): array {
+                    return [
+                        'endpoint' => (string)($e['endpoint'] ?? ''),
+                        'count' => (int)($e['count'] ?? 0),
+                    ];
+                }, $stats['top_endpoints'] ?? []),
+            ],
+            'endpoints' => array_map(static function (array $e): array {
+                return [
+                    'method' => (string)($e['method'] ?? 'GET'),
+                    'path' => (string)($e['path'] ?? ''),
+                    'description' => (string)($e['description'] ?? ''),
+                ];
+            }, $this->getEndpointsList()),
+            'base_url' => base_url('api'),
+            'urls' => [
+                'generate_token' => '/admin/' . rawurlencode($slug) . '/api/generate-token',
+                'revoke_token' => '/admin/' . rawurlencode($slug) . '/api/revoke-token',
+                'generate_key' => '/admin/' . rawurlencode($slug) . '/api/generate-key',
+                'revoke_key' => '/admin/' . rawurlencode($slug) . '/api/revoke-key',
+                'dashboard' => '/admin/' . rawurlencode($slug) . '/dashboard',
+            ],
         ];
 
-        $this->view('admin/api/index', $data);
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_API__', $payload);
     }
 
     /**

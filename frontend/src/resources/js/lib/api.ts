@@ -65,7 +65,9 @@ export async function put<T>(url: string, body?: unknown): Promise<T> {
   return data
 }
 
-export async function del<T>(url: string): Promise<T> {
-  const { data } = await api.delete<T>(url)
+export async function del<T>(url: string, body?: unknown): Promise<T> {
+  const { data } = await api.delete<T>(url, {
+    data: body,
+  })
   return data
 }

@@ -94,3 +94,23 @@ export interface UsersStats {
   owner: number
   staff: number
 }
+
+export type ManagedUserRole = 'root' | 'owner' | 'staff'
+
+export interface UserUpsertPayload {
+  company_id: number
+  name: string
+  email: string
+  password?: string
+  role: ManagedUserRole
+  active: boolean
+}
+
+export interface UserPasswordPayload {
+  user_id: number
+  password: string
+}
+
+export interface UserDeletePayload {
+  user_id: number
+}

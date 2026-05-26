@@ -10,7 +10,7 @@ class AdminGuard
      *
      * @return array{0: array, 1: array}
      */
-    public static function requireCompanyAccess(string $slug, bool $ensureContext = true): array
+    public static function requireCompanyAccess(string $slug, bool $ensureContext = true, ?string $permissionKey = null): array
     {
         Auth::start();
 
@@ -27,8 +27,7 @@ class AdminGuard
             exit;
         }
 
-        $isRoot = ($user['role'] === 'root');
-        if (!$isRoot && (int)$user['company_id'] !== (int)$company['id']) {
+        if (!Auth::hasCompanyAccess((int)$company['id'], $user)) {
             http_response_code(403);
             echo 'Acesso negado';
             exit;
@@ -36,6 +35,10 @@ class AdminGuard
 
         if ($ensureContext) {
             Auth::setActiveCompany((int)$company['id'], (string)($company['slug'] ?? $slug));
+        }
+
+        if ($permissionKey !== null) {
+            Auth::requirePermission($permissionKey, $user, (int)$company['id']);
         }
 
         return [$user, $company];

@@ -42,7 +42,6 @@ class AdminLoyaltyProgramController extends Controller
         $db = db();
         $program = LoyaltyProgram::getActiveByCompany($db, (int)$company['id']);
 
-        // Se não tem programa ativo, buscar qualquer programa (mesmo inativo)
         if (!$program) {
             $stmt = $db->prepare('SELECT * FROM loyalty_programs WHERE company_id = ? ORDER BY id DESC LIMIT 1');
             $stmt->execute([$company['id']]);
@@ -54,13 +53,46 @@ class AdminLoyaltyProgramController extends Controller
             $stats = LoyaltyProgram::getDashboardStats($db, (int)$program['id']);
         }
 
-        $this->view('admin/loyalty-program/index', [
-            'slug'    => $slug,
-            'company' => $company,
-            'user'    => $user,
-            'program' => $program,
-            'stats'   => $stats,
-        ]);
+        $error = $_SESSION['loyalty_error'] ?? null;
+        unset($_SESSION['loyalty_error']);
+
+        $success = null;
+        if (isset($_GET['success'])) {
+            $success = match($_GET['success']) {
+                'created' => 'Programa criado com sucesso!',
+                'updated' => 'Programa atualizado com sucesso!',
+                'enabled' => 'Programa ativado.',
+                'disabled' => 'Programa desativado.',
+                default => 'Operação realizada com sucesso.'
+            };
+        }
+
+        $payload = [
+            'program' => $program ? [
+                'id' => (int)$program['id'],
+                'name' => (string)($program['name'] ?? ''),
+                'required_orders' => (int)($program['required_orders'] ?? 5),
+                'reward_type' => (string)($program['reward_type'] ?? 'discount_percentage'),
+                'reward_value' => (float)($program['reward_value'] ?? 0),
+                'reward_description' => (string)($program['reward_description'] ?? ''),
+                'is_active' => (int)($program['is_active'] ?? 0) === 1,
+                'created_at' => (string)($program['created_at'] ?? ''),
+            ] : null,
+            'stats' => $stats ? [
+                'total_participants' => (int)($stats['total_participants'] ?? 0),
+                'active_participants' => (int)($stats['active_participants'] ?? 0),
+                'avg_progress' => (float)($stats['avg_progress'] ?? 0),
+                'total_completions' => (int)($stats['total_completions'] ?? 0),
+            ] : null,
+            'flash' => ['error' => $error, 'success' => $success],
+            'urls' => [
+                'submit' => '/admin/' . rawurlencode($slug) . '/loyalty-program',
+                'toggle_base' => '/admin/' . rawurlencode($slug) . '/loyalty-program/',
+                'stats' => '/admin/' . rawurlencode($slug) . '/loyalty-program/stats',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_LOYALTY_PROGRAM__', $payload);
     }
 
     /**

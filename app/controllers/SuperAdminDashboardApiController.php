@@ -2,7 +2,11 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../core/Database.php';
 require_once __DIR__ . '/../middleware/SuperAdminJwtMiddleware.php';
+require_once __DIR__ . '/../models/User.php';
+require_once __DIR__ . '/../models/SuperAdmin.php';
+require_once __DIR__ . '/../services/SmartCache.php';
 
 /**
  * SuperAdminDashboardApiController
@@ -254,6 +258,16 @@ class SuperAdminDashboardApiController
 
         $companyId = max(0, (int)($_GET['company_id'] ?? 0));
 
+        $cacheKey = 'superadmin:dashboard:' . ($companyId > 0 ? $companyId : 'platform');
+        $cacheTtl = 60; // seconds
+
+        SmartCache::init();
+        $cached = SmartCache::get($cacheKey);
+        if ($cached !== null) {
+            $this->respond(200, ['success' => true, 'data' => $cached]);
+            return;
+        }
+
         $payload = [
             'kpis' => [
                 'stores_online' => 0,
@@ -388,6 +402,8 @@ class SuperAdminDashboardApiController
             $cpu = is_array($load) && isset($load[0]) ? (float)$load[0] : 0.0;
             $payload['system']['cpu_percent'] = (int)max(0, min(100, round($cpu * 100)));
             $payload['system']['ram_mb'] = (int)round(memory_get_usage(true) / 1024 / 1024);
+
+            SmartCache::set($cacheKey, $payload, $cacheTtl);
         } catch (\Throwable $e) {
             // Keep defaults when metrics tables are not fully provisioned.
         }
@@ -430,10 +446,6 @@ class SuperAdminDashboardApiController
         try {
             $db = Database::getInstance();
 
-            $countStmt = $db->prepare('SELECT COUNT(*) FROM companies c' . $whereSql);
-            $countStmt->execute($bind);
-            $total = (int)$countStmt->fetchColumn();
-
             $statsStmt = $db->prepare(
                 'SELECT
                     COUNT(*) AS total,
@@ -443,6 +455,7 @@ class SuperAdminDashboardApiController
             );
             $statsStmt->execute($bind);
             $stats = $statsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $total = (int)($stats['total'] ?? 0);
 
             $rowsStmt = $db->prepare(
                 'SELECT
@@ -450,38 +463,61 @@ class SuperAdminDashboardApiController
                     c.name,
                     c.slug,
                     c.active,
-                    c.created_at,
-                          COALESCE(oc.orders_count, 0) AS orders_count,
-                          COALESCE(uc.users_count, 0) AS users_count
-                      FROM companies c
-                      LEFT JOIN (
-                          SELECT o.company_id, COUNT(*) AS orders_count
-                          FROM orders o
-                          GROUP BY o.company_id
-                      ) oc ON oc.company_id = c.id
-                      LEFT JOIN (
-                          SELECT u.company_id, COUNT(*) AS users_count
-                          FROM users u
-                          WHERE u.company_id IS NOT NULL
-                          GROUP BY u.company_id
-                      ) uc ON uc.company_id = c.id' . $whereSql .
+                    c.created_at
+                  FROM companies c' . $whereSql .
                 ' ORDER BY c.id DESC
                   LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset
             );
             $rowsStmt->execute($bind);
             $rows = $rowsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+            $companyIds = array_map(static fn(array $row): int => (int)($row['id'] ?? 0), $rows);
+            $companyIds = array_values(array_filter($companyIds, static fn(int $id): bool => $id > 0));
+
+            $ordersCountByCompany = [];
+            $usersCountByCompany = [];
+
+            if ($companyIds !== []) {
+                $inClause = implode(',', array_fill(0, count($companyIds), '?'));
+
+                $ordersCountStmt = $db->prepare(
+                    'SELECT company_id, COUNT(*) AS orders_count
+                     FROM orders
+                     WHERE company_id IN (' . $inClause . ')
+                     GROUP BY company_id'
+                );
+                $ordersCountStmt->execute($companyIds);
+                $ordersCountRows = $ordersCountStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                foreach ($ordersCountRows as $countRow) {
+                    $ordersCountByCompany[(int)($countRow['company_id'] ?? 0)] = (int)($countRow['orders_count'] ?? 0);
+                }
+
+                $usersCountStmt = $db->prepare(
+                    'SELECT company_id, COUNT(*) AS users_count
+                     FROM users
+                     WHERE company_id IN (' . $inClause . ')
+                     GROUP BY company_id'
+                );
+                $usersCountStmt->execute($companyIds);
+                $usersCountRows = $usersCountStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                foreach ($usersCountRows as $countRow) {
+                    $usersCountByCompany[(int)($countRow['company_id'] ?? 0)] = (int)($countRow['users_count'] ?? 0);
+                }
+            }
+
             $this->respond(200, [
                 'success' => true,
                 'data' => [
-                    'items' => array_map(static function (array $row): array {
+                    'items' => array_map(static function (array $row) use ($ordersCountByCompany, $usersCountByCompany): array {
+                        $companyId = (int)($row['id'] ?? 0);
+
                         return [
-                            'id' => (int)($row['id'] ?? 0),
+                            'id' => $companyId,
                             'name' => (string)($row['name'] ?? ''),
                             'slug' => (string)($row['slug'] ?? ''),
                             'active' => (int)($row['active'] ?? 0) === 1,
-                            'orders_count' => (int)($row['orders_count'] ?? 0),
-                            'users_count' => (int)($row['users_count'] ?? 0),
+                            'orders_count' => (int)($ordersCountByCompany[$companyId] ?? 0),
+                            'users_count' => (int)($usersCountByCompany[$companyId] ?? 0),
                             'created_at' => (string)($row['created_at'] ?? ''),
                         ];
                     }, $rows),
@@ -502,6 +538,228 @@ class SuperAdminDashboardApiController
             ]);
         } catch (\Throwable $e) {
             $this->respond(500, ['success' => false, 'message' => 'Falha ao carregar lojas']);
+        }
+    }
+
+    // ─── POST /api/superadmin/stores/toggle-status ─────────────────────────
+
+    public function toggleStoreStatus(): void
+    {
+        $this->requireJson();
+        $this->assertRootAccess();
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $companyId = (int)($body['company_id'] ?? 0);
+
+        if ($companyId <= 0) {
+            $this->respond(400, ['success' => false, 'message' => 'company_id inválido']);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+            $stmt = $db->prepare('SELECT id, name, slug, active FROM companies WHERE id = ? LIMIT 1');
+            $stmt->execute([$companyId]);
+            $company = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$company) {
+                $this->respond(404, ['success' => false, 'message' => 'Loja não encontrada']);
+                return;
+            }
+
+            $nextActive = ((int)($company['active'] ?? 0) === 1) ? 0 : 1;
+
+            $up = $db->prepare('UPDATE companies SET active = ?, updated_at = NOW() WHERE id = ? LIMIT 1');
+            $up->execute([$nextActive, $companyId]);
+
+            $claims = SuperAdminJwtMiddleware::authenticate();
+            $actorId = (int)($claims['sub'] ?? 0);
+            $logStmt = $db->prepare(
+                'INSERT INTO audit_logs (super_admin_id, module, entity_type, entity_id, action, description, company_id, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())'
+            );
+            $logStmt->execute([
+                $actorId,
+                'stores',
+                'company',
+                $companyId,
+                $nextActive === 1 ? 'activate' : 'suspend',
+                json_encode([
+                    'company' => (string)($company['name'] ?? ''),
+                    'slug' => (string)($company['slug'] ?? ''),
+                    'active' => $nextActive === 1,
+                ], JSON_UNESCAPED_UNICODE),
+                $companyId,
+            ]);
+
+            $this->invalidateStoreCaches($companyId, (string)($company['slug'] ?? ''));
+
+            $this->respond(200, [
+                'success' => true,
+                'data' => [
+                    'company_id' => $companyId,
+                    'active' => $nextActive === 1,
+                ],
+                'message' => $nextActive === 1 ? 'Loja ativada com sucesso' : 'Loja suspensa com sucesso',
+            ]);
+        } catch (\Throwable $e) {
+            $this->respond(500, ['success' => false, 'message' => 'Falha ao alterar status da loja']);
+        }
+    }
+
+    // ─── POST /api/superadmin/stores/reset-cache ───────────────────────────
+
+    public function resetStoreCache(): void
+    {
+        $this->requireJson();
+        $this->assertRootAccess();
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $companyId = (int)($body['company_id'] ?? 0);
+
+        if ($companyId <= 0) {
+            $this->respond(400, ['success' => false, 'message' => 'company_id inválido']);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+            $stmt = $db->prepare('SELECT id, slug FROM companies WHERE id = ? LIMIT 1');
+            $stmt->execute([$companyId]);
+            $company = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$company) {
+                $this->respond(404, ['success' => false, 'message' => 'Loja não encontrada']);
+                return;
+            }
+
+            $this->invalidateStoreCaches($companyId, (string)($company['slug'] ?? ''));
+
+            $this->respond(200, [
+                'success' => true,
+                'message' => 'Cache da loja invalidado com sucesso',
+            ]);
+        } catch (\Throwable $e) {
+            $this->respond(500, ['success' => false, 'message' => 'Falha ao invalidar cache da loja']);
+        }
+    }
+
+    // ─── DELETE /api/superadmin/stores ──────────────────────────────────────
+
+    public function deleteStore(): void
+    {
+        $this->requireJson();
+        $this->assertRootAccess();
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $companyId = (int)($body['company_id'] ?? 0);
+        $forceDelete = (bool)($body['force_delete'] ?? false);
+
+        if ($companyId <= 0) {
+            $this->respond(400, ['success' => false, 'message' => 'company_id inválido']);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+            $stmt = $db->prepare('SELECT id, name, slug FROM companies WHERE id = ? LIMIT 1');
+            $stmt->execute([$companyId]);
+            $company = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$company) {
+                $this->respond(404, ['success' => false, 'message' => 'Loja não encontrada']);
+                return;
+            }
+
+            $ordersStmt = $db->prepare('SELECT COUNT(*) FROM orders WHERE company_id = ?');
+            $ordersStmt->execute([$companyId]);
+            $ordersCount = (int)$ordersStmt->fetchColumn();
+
+            $usersStmt = $db->prepare('SELECT COUNT(*) FROM users WHERE company_id = ?');
+            $usersStmt->execute([$companyId]);
+            $usersCount = (int)$usersStmt->fetchColumn();
+
+            if (($ordersCount > 0 || $usersCount > 0) && !$forceDelete) {
+                $this->respond(409, [
+                    'success' => false,
+                    'message' => 'Confirmação obrigatória para exclusão permanente. Esta loja possui dados vinculados.',
+                    'data' => [
+                        'orders_count' => $ordersCount,
+                        'users_count' => $usersCount,
+                        'requires_force_delete' => true,
+                    ],
+                ]);
+                return;
+            }
+
+            $db->beginTransaction();
+
+            // Ordered from most-dependent to least-dependent to respect FK constraints.
+            $tenantTables = [
+                'order_items', 'order_events', 'order_timeline', 'order_status_history',
+                'available_order_numbers', 'orders',
+                'customer_loyalty_coupons', 'customer_loyalty_progress', 'customer_addresses',
+                'customers',
+                'combo_group_items', 'product_native_ingredients', 'product_additional_costs',
+                'product_packaging', 'product_custom_items', 'customization_template_items',
+                'combo_groups', 'product_custom_groups', 'product_custom_group_templates',
+                'customization_templates', 'products',
+                'category_cross_sell_groups', 'categories',
+                'packaging_supplies', 'ingredients',
+                'expense_categories', 'expenses',
+                'delivery_zones', 'delivery_cities',
+                'payment_methods', 'loyalty_programs',
+                'evolution_instances', 'push_subscriptions',
+                'company_order_number_sequence', 'company_metrics_cache',
+                'company_operational_status', 'company_resources_flags',
+                'financial_settings', 'feature_flag_history',
+                'health_checks', 'invoices',
+                'events_log', 'audit_logs', 'admin_impersonations',
+                'users',
+            ];
+
+            foreach ($tenantTables as $tableName) {
+                $cascadeDelStmt = $db->prepare('DELETE FROM `' . $tableName . '` WHERE company_id = ?');
+                $cascadeDelStmt->execute([$companyId]);
+            }
+
+            $delStmt = $db->prepare('DELETE FROM companies WHERE id = ? LIMIT 1');
+            $delStmt->execute([$companyId]);
+
+            $claims = SuperAdminJwtMiddleware::authenticate();
+            $actorId = (int)($claims['sub'] ?? 0);
+            $logStmt = $db->prepare(
+                'INSERT INTO audit_logs (super_admin_id, module, entity_type, entity_id, action, description, company_id, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())'
+            );
+            $logStmt->execute([
+                $actorId,
+                'stores',
+                'company',
+                $companyId,
+                'delete_force',
+                json_encode([
+                    'company' => (string)($company['name'] ?? ''),
+                    'slug' => (string)($company['slug'] ?? ''),
+                    'orders_count' => $ordersCount,
+                    'users_count' => $usersCount,
+                ], JSON_UNESCAPED_UNICODE),
+                $companyId,
+            ]);
+
+            $db->commit();
+
+            $this->invalidateStoreCaches($companyId, (string)($company['slug'] ?? ''));
+
+            $this->respond(200, [
+                'success' => true,
+                'message' => 'Loja e dados relacionados excluídos com sucesso',
+            ]);
+        } catch (\Throwable $e) {
+            if (isset($db) && $db instanceof PDO && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            $this->respond(500, ['success' => false, 'message' => 'Falha ao excluir loja']);
         }
     }
 
@@ -547,14 +805,6 @@ class SuperAdminDashboardApiController
         try {
             $db = Database::getInstance();
 
-            $countStmt = $db->prepare(
-                'SELECT COUNT(*)
-                 FROM orders o
-                 INNER JOIN companies c ON c.id = o.company_id' . $whereSql
-            );
-            $countStmt->execute($bind);
-            $total = (int)$countStmt->fetchColumn();
-
             $statsStmt = $db->prepare(
                 'SELECT
                     COUNT(*) AS total,
@@ -568,6 +818,7 @@ class SuperAdminDashboardApiController
             );
             $statsStmt->execute($bind);
             $stats = $statsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $total = (int)($stats['total'] ?? 0);
 
             $rowsStmt = $db->prepare(
                 'SELECT
@@ -732,14 +983,6 @@ class SuperAdminDashboardApiController
         try {
             $db = Database::getInstance();
 
-            $countStmt = $db->prepare(
-                'SELECT COUNT(*)
-                 FROM users u
-                 LEFT JOIN companies c ON c.id = u.company_id' . $whereSql
-            );
-            $countStmt->execute($bind);
-            $total = (int)$countStmt->fetchColumn();
-
             $statsStmt = $db->prepare(
                 'SELECT
                     COUNT(*) AS total,
@@ -753,6 +996,7 @@ class SuperAdminDashboardApiController
             );
             $statsStmt->execute($bind);
             $stats = $statsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $total = (int)($stats['total'] ?? 0);
 
             $rowsStmt = $db->prepare(
                 'SELECT
@@ -807,6 +1051,324 @@ class SuperAdminDashboardApiController
             ]);
         } catch (\Throwable $e) {
             $this->respond(500, ['success' => false, 'message' => 'Falha ao carregar usuários']);
+        }
+    }
+
+    // ─── POST /api/superadmin/users/create ─────────────────────────────────
+
+    public function createUser(): void
+    {
+        $this->requireJson();
+        $this->assertRootAccess();
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $companyId = (int)($body['company_id'] ?? 0);
+        $name = trim((string)($body['name'] ?? ''));
+        $email = filter_var(trim((string)($body['email'] ?? '')), FILTER_SANITIZE_EMAIL);
+        $password = (string)($body['password'] ?? '');
+        $role = trim((string)($body['role'] ?? 'owner'));
+        $active = !array_key_exists('active', $body) || (bool)$body['active'];
+
+        if ($companyId <= 0) {
+            $this->respond(400, ['success' => false, 'message' => 'company_id inválido']);
+            return;
+        }
+
+        if ($name === '' || mb_strlen($name) > 150) {
+            $this->respond(400, ['success' => false, 'message' => 'Nome do usuário é obrigatório']);
+            return;
+        }
+
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->respond(400, ['success' => false, 'message' => 'E-mail inválido']);
+            return;
+        }
+
+        if (strlen($password) < 8) {
+            $this->respond(400, ['success' => false, 'message' => 'Senha deve ter ao menos 8 caracteres']);
+            return;
+        }
+
+        $validRoles = ['root', 'owner', 'staff'];
+        if (!in_array($role, $validRoles, true)) {
+            $this->respond(400, ['success' => false, 'message' => 'Papel inválido']);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+
+            $companyStmt = $db->prepare('SELECT id, name, slug FROM companies WHERE id = ? LIMIT 1');
+            $companyStmt->execute([$companyId]);
+            $company = $companyStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$company) {
+                $this->respond(404, ['success' => false, 'message' => 'Loja não encontrada']);
+                return;
+            }
+
+            $existingStmt = $db->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
+            $existingStmt->execute([$email]);
+            if ($existingStmt->fetchColumn()) {
+                $this->respond(409, ['success' => false, 'message' => 'Este e-mail já está cadastrado']);
+                return;
+            }
+
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            $insertStmt = $db->prepare(
+                'INSERT INTO users (company_id, name, email, password_hash, role, active, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, NOW())'
+            );
+            $insertStmt->execute([
+                $companyId,
+                $name,
+                $email,
+                $passwordHash,
+                $role,
+                $active ? 1 : 0,
+            ]);
+
+            $userId = (int)$db->lastInsertId();
+
+            $this->logAuditAction('users', 'user', $userId, 'create', [
+                'user' => $name,
+                'email' => $email,
+                'role' => $role,
+                'active' => $active,
+            ], $companyId);
+
+            $this->respond(201, [
+                'success' => true,
+                'message' => 'Usuário criado com sucesso',
+                'data' => [
+                    'user_id' => $userId,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            $this->respond(500, ['success' => false, 'message' => 'Falha ao criar usuário']);
+        }
+    }
+
+    // ─── POST /api/superadmin/users/update ─────────────────────────────────
+
+    public function updateUser(): void
+    {
+        $this->requireJson();
+        $this->assertRootAccess();
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $userId = (int)($body['user_id'] ?? 0);
+        $name = trim((string)($body['name'] ?? ''));
+        $email = filter_var(trim((string)($body['email'] ?? '')), FILTER_SANITIZE_EMAIL);
+        $role = trim((string)($body['role'] ?? 'owner'));
+        $active = !array_key_exists('active', $body) || (bool)$body['active'];
+
+        if ($userId <= 0) {
+            $this->respond(400, ['success' => false, 'message' => 'user_id inválido']);
+            return;
+        }
+
+        if ($name === '' || mb_strlen($name) > 150) {
+            $this->respond(400, ['success' => false, 'message' => 'Nome do usuário é obrigatório']);
+            return;
+        }
+
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->respond(400, ['success' => false, 'message' => 'E-mail inválido']);
+            return;
+        }
+
+        $validRoles = ['root', 'owner', 'staff'];
+        if (!in_array($role, $validRoles, true)) {
+            $this->respond(400, ['success' => false, 'message' => 'Papel inválido']);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+            $userStmt = $db->prepare('SELECT id, company_id, name, email, role, active FROM users WHERE id = ? LIMIT 1');
+            $userStmt->execute([$userId]);
+            $user = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$user) {
+                $this->respond(404, ['success' => false, 'message' => 'Usuário não encontrado']);
+                return;
+            }
+
+            $companyId = isset($user['company_id']) ? (int)$user['company_id'] : 0;
+            if ($companyId <= 0) {
+                $this->respond(409, ['success' => false, 'message' => 'Este usuário não está vinculado a uma loja']);
+                return;
+            }
+
+            $duplicateStmt = $db->prepare('SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1');
+            $duplicateStmt->execute([$email, $userId]);
+            if ($duplicateStmt->fetchColumn()) {
+                $this->respond(409, ['success' => false, 'message' => 'Este e-mail já está em uso']);
+                return;
+            }
+
+            $existingRole = (string)($user['role'] ?? 'staff');
+            $existingActive = (int)($user['active'] ?? 0) === 1;
+            if ($existingRole === 'owner' && ($role !== 'owner' || !$active)) {
+                $ownersStmt = $db->prepare(
+                    'SELECT COUNT(*) FROM users WHERE company_id = ? AND role = ? AND active = 1 AND id <> ?'
+                );
+                $ownersStmt->execute([$companyId, 'owner', $userId]);
+                if ((int)$ownersStmt->fetchColumn() <= 0) {
+                    $this->respond(409, ['success' => false, 'message' => 'A loja precisa manter ao menos um owner ativo']);
+                    return;
+                }
+            }
+
+            $updateStmt = $db->prepare(
+                'UPDATE users SET name = ?, email = ?, role = ?, active = ? WHERE id = ? LIMIT 1'
+            );
+            $updateStmt->execute([
+                $name,
+                $email,
+                $role,
+                $active ? 1 : 0,
+                $userId,
+            ]);
+
+            $this->logAuditAction('users', 'user', $userId, 'update', [
+                'before' => [
+                    'name' => (string)($user['name'] ?? ''),
+                    'email' => (string)($user['email'] ?? ''),
+                    'role' => $existingRole,
+                    'active' => $existingActive,
+                ],
+                'after' => [
+                    'name' => $name,
+                    'email' => $email,
+                    'role' => $role,
+                    'active' => $active,
+                ],
+            ], $companyId);
+
+            $this->respond(200, [
+                'success' => true,
+                'message' => 'Usuário atualizado com sucesso',
+            ]);
+        } catch (\Throwable $e) {
+            $this->respond(500, ['success' => false, 'message' => 'Falha ao atualizar usuário']);
+        }
+    }
+
+    // ─── POST /api/superadmin/users/change-password ─────────────────────────
+
+    public function changeUserPassword(): void
+    {
+        $this->requireJson();
+        $this->assertRootAccess();
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $userId = (int)($body['user_id'] ?? 0);
+        $password = (string)($body['password'] ?? '');
+
+        if ($userId <= 0) {
+            $this->respond(400, ['success' => false, 'message' => 'user_id inválido']);
+            return;
+        }
+
+        if (strlen($password) < 8) {
+            $this->respond(400, ['success' => false, 'message' => 'Senha deve ter ao menos 8 caracteres']);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+            $userStmt = $db->prepare('SELECT id, company_id, name, email FROM users WHERE id = ? LIMIT 1');
+            $userStmt->execute([$userId]);
+            $user = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$user) {
+                $this->respond(404, ['success' => false, 'message' => 'Usuário não encontrado']);
+                return;
+            }
+
+            $companyId = isset($user['company_id']) ? (int)$user['company_id'] : 0;
+            if ($companyId <= 0) {
+                $this->respond(409, ['success' => false, 'message' => 'Este usuário não está vinculado a uma loja']);
+                return;
+            }
+
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            $updateStmt = $db->prepare('UPDATE users SET password_hash = ? WHERE id = ? LIMIT 1');
+            $updateStmt->execute([$passwordHash, $userId]);
+
+            $this->logAuditAction('users', 'user', $userId, 'change_password', [
+                'user' => (string)($user['name'] ?? ''),
+                'email' => (string)($user['email'] ?? ''),
+            ], $companyId);
+
+            $this->respond(200, [
+                'success' => true,
+                'message' => 'Senha alterada com sucesso',
+            ]);
+        } catch (\Throwable $e) {
+            $this->respond(500, ['success' => false, 'message' => 'Falha ao alterar senha']);
+        }
+    }
+
+    // ─── DELETE /api/superadmin/users ───────────────────────────────────────
+
+    public function deleteUser(): void
+    {
+        $this->requireJson();
+        $this->assertRootAccess();
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $userId = (int)($body['user_id'] ?? 0);
+
+        if ($userId <= 0) {
+            $this->respond(400, ['success' => false, 'message' => 'user_id inválido']);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+            $userStmt = $db->prepare('SELECT id, company_id, name, email, role, active FROM users WHERE id = ? LIMIT 1');
+            $userStmt->execute([$userId]);
+            $user = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$user) {
+                $this->respond(404, ['success' => false, 'message' => 'Usuário não encontrado']);
+                return;
+            }
+
+            $companyId = isset($user['company_id']) ? (int)$user['company_id'] : 0;
+            if ($companyId <= 0) {
+                $this->respond(409, ['success' => false, 'message' => 'Este usuário não está vinculado a uma loja']);
+                return;
+            }
+
+            if ((string)($user['role'] ?? '') === 'owner') {
+                $ownersStmt = $db->prepare('SELECT COUNT(*) FROM users WHERE company_id = ? AND role = ? AND id <> ?');
+                $ownersStmt->execute([$companyId, 'owner', $userId]);
+                if ((int)$ownersStmt->fetchColumn() <= 0) {
+                    $this->respond(409, ['success' => false, 'message' => 'A loja precisa manter ao menos um owner']);
+                    return;
+                }
+            }
+
+            $deleteStmt = $db->prepare('DELETE FROM users WHERE id = ? LIMIT 1');
+            $deleteStmt->execute([$userId]);
+
+            $this->logAuditAction('users', 'user', $userId, 'delete', [
+                'user' => (string)($user['name'] ?? ''),
+                'email' => (string)($user['email'] ?? ''),
+                'role' => (string)($user['role'] ?? ''),
+                'active' => (int)($user['active'] ?? 0) === 1,
+            ], $companyId);
+
+            $this->respond(200, [
+                'success' => true,
+                'message' => 'Usuário excluído com sucesso',
+            ]);
+        } catch (\Throwable $e) {
+            $this->respond(500, ['success' => false, 'message' => 'Falha ao excluir usuário']);
         }
     }
 
@@ -1945,6 +2507,544 @@ class SuperAdminDashboardApiController
         }
     }
 
+    // ─── GET /api/superadmin/billing ───────────────────────────────────────
+
+    public function billing(): void
+    {
+        $this->requireBillingPermission('billing.read');
+
+        require_once __DIR__ . '/../models/Plan.php';
+        require_once __DIR__ . '/../models/Subscription.php';
+        require_once __DIR__ . '/../models/Invoice.php';
+        require_once __DIR__ . '/../models/UsageLimit.php';
+
+        $companyId = max(0, (int)($_GET['company_id'] ?? 0));
+        $status = trim((string)($_GET['subscription_status'] ?? ''));
+        $allowedStatuses = ['trialing', 'active', 'past_due', 'canceled', 'incomplete', 'paused'];
+        if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
+            $status = '';
+        }
+
+        try {
+            $db = Database::getInstance();
+
+            $companies = $db->query('SELECT id, name, slug, active FROM companies ORDER BY name ASC')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $plans = Plan::all(true);
+
+            $subsSql = 'SELECT s.id, s.company_id, s.plan_id, s.status, s.current_period_end, s.created_at,
+                               c.name AS company_name, c.slug AS company_slug,
+                               p.name AS plan_name, p.code AS plan_code, p.price_monthly, p.currency
+                        FROM subscriptions s
+                        INNER JOIN companies c ON c.id = s.company_id
+                        INNER JOIN plans p ON p.id = s.plan_id
+                        WHERE 1=1';
+            $subsBind = [];
+
+            if ($companyId > 0) {
+                $subsSql .= ' AND s.company_id = ?';
+                $subsBind[] = $companyId;
+            }
+            if ($status !== '') {
+                $subsSql .= ' AND s.status = ?';
+                $subsBind[] = $status;
+            }
+
+            $subsSql .= ' ORDER BY s.id DESC LIMIT 120';
+            $subsStmt = $db->prepare($subsSql);
+            $subsStmt->execute($subsBind);
+            $subscriptions = $subsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            $currentSubscription = null;
+            $invoices = [];
+            $usageLimits = [];
+            if ($companyId > 0) {
+                $currentSubscription = Subscription::currentByCompany($companyId);
+                $invoices = Invoice::listByCompany($companyId, 80);
+                $usageLimits = UsageLimit::listByCompany($companyId);
+            }
+
+            $statusRows = $db->query('SELECT status, COUNT(*) AS total FROM subscriptions GROUP BY status')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $statusSummary = [
+                'trialing' => 0,
+                'active' => 0,
+                'past_due' => 0,
+                'canceled' => 0,
+                'incomplete' => 0,
+                'paused' => 0,
+            ];
+            foreach ($statusRows as $row) {
+                $key = (string)($row['status'] ?? '');
+                if (array_key_exists($key, $statusSummary)) {
+                    $statusSummary[$key] = (int)($row['total'] ?? 0);
+                }
+            }
+
+            $this->respond(200, [
+                'success' => true,
+                'data' => [
+                    'companies' => $companies,
+                    'plans' => $plans,
+                    'subscriptions' => $subscriptions,
+                    'current_subscription' => $currentSubscription,
+                    'invoices' => $invoices,
+                    'usage_limits' => $usageLimits,
+                    'filters' => [
+                        'company_id' => $companyId,
+                        'subscription_status' => $status,
+                    ],
+                    'summary' => $statusSummary,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            $this->respond(500, ['success' => false, 'message' => 'Falha ao carregar billing']);
+        }
+    }
+
+    // ─── GET /api/superadmin/billing/plans ──────────────────────────────────
+
+    public function billingPlans(): void
+    {
+        $this->requireBillingPermission('billing.read');
+
+        require_once __DIR__ . '/../models/Plan.php';
+
+        $onlyActive = isset($_GET['only_active']) ? filter_var($_GET['only_active'], FILTER_VALIDATE_BOOL) : false;
+
+        $this->respond(200, [
+            'success' => true,
+            'data' => [
+                'plans' => Plan::all($onlyActive),
+            ],
+        ]);
+    }
+
+    // ─── POST /api/superadmin/billing/plans/save ───────────────────────────
+
+    public function billingSavePlan(): void
+    {
+        $this->requireJson();
+        $this->requireBillingPermission('billing.manage');
+
+        require_once __DIR__ . '/../models/Plan.php';
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $code = trim((string)($body['code'] ?? ''));
+        $name = trim((string)($body['name'] ?? ''));
+        $description = trim((string)($body['description'] ?? ''));
+        $priceMonthly = (float)($body['price_monthly'] ?? 0);
+        $priceYearly = (float)($body['price_yearly'] ?? 0);
+        $currency = strtoupper(trim((string)($body['currency'] ?? 'BRL')));
+        $isActive = !empty($body['is_active']) ? 1 : 0;
+        $limitsJson = $body['limits_json'] ?? null;
+
+        if ($code === '' || $name === '') {
+            $this->respond(400, ['success' => false, 'message' => 'code e name sao obrigatorios']);
+            return;
+        }
+
+        if (!preg_match('/^[A-Za-z0-9._-]{2,60}$/', $code)) {
+            $this->respond(400, ['success' => false, 'message' => 'code invalido']);
+            return;
+        }
+
+        if (!preg_match('/^[A-Z]{3}$/', $currency)) {
+            $this->respond(400, ['success' => false, 'message' => 'currency invalida']);
+            return;
+        }
+
+        if ($limitsJson !== null && !is_array($limitsJson) && !is_string($limitsJson)) {
+            $this->respond(400, ['success' => false, 'message' => 'limits_json invalido']);
+            return;
+        }
+
+        $payload = [
+            'code' => $code,
+            'name' => $name,
+            'description' => $description !== '' ? $description : null,
+            'price_monthly' => $priceMonthly,
+            'price_yearly' => $priceYearly,
+            'currency' => $currency,
+            'limits_json' => $limitsJson,
+            'is_active' => $isActive,
+        ];
+
+        $planId = Plan::upsertByCode($payload);
+        $plan = Plan::find($planId);
+
+        $this->logAuditAction('billing', 'plan', $planId, 'upsert', [
+            'code' => $code,
+            'name' => $name,
+            'is_active' => $isActive,
+        ]);
+
+        $this->respond(200, [
+            'success' => true,
+            'message' => 'Plano salvo com sucesso',
+            'data' => [
+                'plan' => $plan,
+            ],
+        ]);
+    }
+
+    // ─── POST /api/superadmin/billing/plans/{code}/toggle ──────────────────
+
+    public function billingTogglePlanStatus(array $params = []): void
+    {
+        $this->requireJson();
+        $this->requireBillingPermission('billing.manage');
+
+        require_once __DIR__ . '/../models/Plan.php';
+
+        $code = trim((string)($params['code'] ?? ''));
+        if ($code === '') {
+            $this->respond(400, ['success' => false, 'message' => 'code invalido']);
+            return;
+        }
+
+        $plan = Plan::findByCode($code);
+        if (!$plan) {
+            $this->respond(404, ['success' => false, 'message' => 'Plano nao encontrado']);
+            return;
+        }
+
+        $newActive = empty($plan['is_active']) ? 1 : 0;
+
+        $planId = Plan::upsertByCode([
+            'code' => (string)$plan['code'],
+            'name' => (string)$plan['name'],
+            'description' => $plan['description'] ?? null,
+            'price_monthly' => (float)($plan['price_monthly'] ?? 0),
+            'price_yearly' => (float)($plan['price_yearly'] ?? 0),
+            'currency' => (string)($plan['currency'] ?? 'BRL'),
+            'limits_json' => $plan['limits_json'] ?? null,
+            'is_active' => $newActive,
+        ]);
+
+        $updated = Plan::find($planId);
+
+        $this->logAuditAction('billing', 'plan', $planId, 'toggle_status', [
+            'code' => $code,
+            'new_is_active' => $newActive,
+        ]);
+
+        $this->respond(200, [
+            'success' => true,
+            'message' => 'Status do plano atualizado',
+            'data' => [
+                'plan' => $updated,
+            ],
+        ]);
+    }
+
+    // ─── POST /api/superadmin/billing/subscriptions/create ─────────────────
+
+    public function billingCreateSubscription(): void
+    {
+        $this->requireJson();
+        $this->requireBillingPermission('billing.manage');
+
+        require_once __DIR__ . '/../models/Plan.php';
+        require_once __DIR__ . '/../models/Subscription.php';
+        require_once __DIR__ . '/../models/UsageLimit.php';
+        require_once __DIR__ . '/../models/Company.php';
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $companyId = (int)($body['company_id'] ?? 0);
+        $planId = (int)($body['plan_id'] ?? 0);
+        $status = trim((string)($body['status'] ?? 'active'));
+        $trialDays = max(0, (int)($body['trial_days'] ?? 0));
+        $billingMonths = max(1, min(24, (int)($body['billing_months'] ?? 1)));
+
+        $allowedStatuses = ['trialing', 'active', 'past_due', 'canceled', 'incomplete', 'paused'];
+        if (!in_array($status, $allowedStatuses, true)) {
+            $this->respond(400, ['success' => false, 'message' => 'Status de assinatura invalido']);
+            return;
+        }
+
+        $company = Company::find($companyId);
+        if (!$company) {
+            $this->respond(404, ['success' => false, 'message' => 'Empresa nao encontrada']);
+            return;
+        }
+
+        $plan = Plan::find($planId);
+        if (!$plan) {
+            $this->respond(404, ['success' => false, 'message' => 'Plano nao encontrado']);
+            return;
+        }
+
+        $claims = SuperAdminJwtMiddleware::authenticate();
+        $actorId = (int)($claims['sub'] ?? 0);
+
+        $now = new DateTimeImmutable('now');
+        $periodStart = $now->format('Y-m-d H:i:s');
+        $periodEnd = $now->modify('+' . $billingMonths . ' month')->format('Y-m-d H:i:s');
+        $trialEndsAt = null;
+        if ($trialDays > 0) {
+            $trialEndsAt = $now->modify('+' . $trialDays . ' day')->format('Y-m-d H:i:s');
+            if ($status === 'active') {
+                $status = 'trialing';
+            }
+        }
+
+        $subscriptionId = Subscription::create([
+            'company_id' => $companyId,
+            'plan_id' => $planId,
+            'status' => $status,
+            'starts_at' => $periodStart,
+            'trial_ends_at' => $trialEndsAt,
+            'current_period_start' => $periodStart,
+            'current_period_end' => $periodEnd,
+            'metadata_json' => [
+                'source' => 'superadmin_api',
+                'billing_months' => $billingMonths,
+                'trial_days' => $trialDays,
+            ],
+            'created_by_super_admin_id' => $actorId > 0 ? $actorId : null,
+        ]);
+
+        $limitsRaw = (string)($plan['limits_json'] ?? '');
+        if ($limitsRaw !== '') {
+            $limits = json_decode($limitsRaw, true);
+            if (is_array($limits)) {
+                foreach ($limits as $resourceKey => $resourceConfig) {
+                    $resourceKey = trim((string)$resourceKey);
+                    if ($resourceKey === '') {
+                        continue;
+                    }
+
+                    $hardLimit = 0;
+                    $softLimit = 0;
+                    $resetPeriod = 'monthly';
+                    $isBlocking = 1;
+
+                    if (is_array($resourceConfig)) {
+                        $hardLimit = (int)($resourceConfig['hard_limit'] ?? 0);
+                        $softLimit = (int)($resourceConfig['soft_limit'] ?? 0);
+                        $resetPeriod = (string)($resourceConfig['reset_period'] ?? 'monthly');
+                        $isBlocking = (int)($resourceConfig['is_blocking'] ?? 1) === 1 ? 1 : 0;
+                    } elseif (is_numeric($resourceConfig)) {
+                        $hardLimit = (int)$resourceConfig;
+                    }
+
+                    UsageLimit::upsert([
+                        'company_id' => $companyId,
+                        'subscription_id' => $subscriptionId,
+                        'resource_key' => $resourceKey,
+                        'hard_limit' => max(0, $hardLimit),
+                        'soft_limit' => max(0, $softLimit),
+                        'current_usage' => 0,
+                        'reset_period' => in_array($resetPeriod, ['daily', 'weekly', 'monthly', 'never'], true) ? $resetPeriod : 'monthly',
+                        'resets_at' => $periodEnd,
+                        'is_blocking' => $isBlocking,
+                    ]);
+                }
+            }
+        }
+
+        $this->logAuditAction('billing', 'subscription', $subscriptionId, 'create', [
+            'company_id' => $companyId,
+            'plan_id' => $planId,
+            'status' => $status,
+        ], $companyId);
+
+        $this->respond(201, [
+            'success' => true,
+            'message' => 'Assinatura criada com sucesso',
+            'data' => [
+                'subscription_id' => $subscriptionId,
+                'company_id' => $companyId,
+            ],
+        ]);
+    }
+
+    // ─── POST /api/superadmin/billing/subscriptions/status ─────────────────
+
+    public function billingUpdateSubscriptionStatus(): void
+    {
+        $this->requireJson();
+        $this->requireBillingPermission('billing.manage');
+
+        require_once __DIR__ . '/../models/Subscription.php';
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $subscriptionId = (int)($body['subscription_id'] ?? 0);
+        $status = trim((string)($body['status'] ?? ''));
+        $allowedStatuses = ['trialing', 'active', 'past_due', 'canceled', 'incomplete', 'paused'];
+
+        if ($subscriptionId < 1 || !in_array($status, $allowedStatuses, true)) {
+            $this->respond(400, ['success' => false, 'message' => 'Dados invalidos para atualizacao de assinatura']);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+            $st = $db->prepare('SELECT id, company_id, status FROM subscriptions WHERE id = ? LIMIT 1');
+            $st->execute([$subscriptionId]);
+            $subscription = $st->fetch(PDO::FETCH_ASSOC);
+
+            if (!$subscription) {
+                $this->respond(404, ['success' => false, 'message' => 'Assinatura nao encontrada']);
+                return;
+            }
+
+            $canceledAt = $status === 'canceled' ? date('Y-m-d H:i:s') : null;
+            Subscription::updateStatus($subscriptionId, $status, $canceledAt);
+
+            $this->logAuditAction('billing', 'subscription', $subscriptionId, 'status_update', [
+                'old_status' => (string)($subscription['status'] ?? ''),
+                'new_status' => $status,
+            ], (int)($subscription['company_id'] ?? 0));
+
+            $this->respond(200, [
+                'success' => true,
+                'message' => 'Status da assinatura atualizado',
+                'data' => [
+                    'subscription_id' => $subscriptionId,
+                    'status' => $status,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            $this->respond(500, ['success' => false, 'message' => 'Falha ao atualizar assinatura']);
+        }
+    }
+
+    // ─── POST /api/superadmin/billing/invoices/create-draft ────────────────
+
+    public function billingCreateInvoiceDraft(): void
+    {
+        $this->requireJson();
+        $this->requireBillingPermission('billing.manage');
+
+        require_once __DIR__ . '/../models/Invoice.php';
+        require_once __DIR__ . '/../models/Subscription.php';
+        require_once __DIR__ . '/../models/Company.php';
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $companyId = (int)($body['company_id'] ?? 0);
+        $amountTotal = (float)($body['amount_total'] ?? 0);
+        $currency = strtoupper(trim((string)($body['currency'] ?? 'BRL')));
+        $dueDateInput = trim((string)($body['due_date'] ?? ''));
+
+        $company = Company::find($companyId);
+        if (!$company) {
+            $this->respond(404, ['success' => false, 'message' => 'Empresa nao encontrada']);
+            return;
+        }
+
+        if ($amountTotal <= 0) {
+            $this->respond(400, ['success' => false, 'message' => 'Valor total deve ser maior que zero']);
+            return;
+        }
+
+        if (!preg_match('/^[A-Z]{3}$/', $currency)) {
+            $this->respond(400, ['success' => false, 'message' => 'Moeda invalida']);
+            return;
+        }
+
+        $dueDate = null;
+        if ($dueDateInput !== '') {
+            $ts = strtotime($dueDateInput);
+            if ($ts !== false) {
+                $dueDate = date('Y-m-d H:i:s', $ts);
+            }
+        }
+        if ($dueDate === null) {
+            $dueDate = date('Y-m-d H:i:s', strtotime('+7 days'));
+        }
+
+        $currentSubscription = Subscription::currentByCompany($companyId);
+
+        $invoiceId = Invoice::createDraft([
+            'company_id' => $companyId,
+            'subscription_id' => $currentSubscription['id'] ?? null,
+            'status' => 'open',
+            'currency' => $currency,
+            'amount_subtotal' => $amountTotal,
+            'amount_tax' => 0,
+            'amount_discount' => 0,
+            'amount_total' => $amountTotal,
+            'due_date' => $dueDate,
+            'payload_json' => [
+                'source' => 'superadmin_api',
+                'created_at' => date('c'),
+            ],
+        ]);
+
+        $this->logAuditAction('billing', 'invoice', $invoiceId, 'create_draft', [
+            'company_id' => $companyId,
+            'amount_total' => $amountTotal,
+            'currency' => $currency,
+        ], $companyId);
+
+        $this->respond(201, [
+            'success' => true,
+            'message' => 'Fatura criada com sucesso',
+            'data' => [
+                'invoice_id' => $invoiceId,
+                'company_id' => $companyId,
+            ],
+        ]);
+    }
+
+    // ─── POST /api/superadmin/billing/invoices/mark-paid ───────────────────
+
+    public function billingMarkInvoicePaid(): void
+    {
+        $this->requireJson();
+        $this->requireBillingPermission('billing.manage');
+
+        require_once __DIR__ . '/../models/Invoice.php';
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $invoiceId = (int)($body['invoice_id'] ?? 0);
+
+        if ($invoiceId < 1) {
+            $this->respond(400, ['success' => false, 'message' => 'invoice_id invalido']);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+            $st = $db->prepare('SELECT id, company_id, status FROM invoices WHERE id = ? LIMIT 1');
+            $st->execute([$invoiceId]);
+            $invoice = $st->fetch(PDO::FETCH_ASSOC);
+
+            if (!$invoice) {
+                $this->respond(404, ['success' => false, 'message' => 'Fatura nao encontrada']);
+                return;
+            }
+
+            if ((string)($invoice['status'] ?? '') === 'paid') {
+                $this->respond(200, [
+                    'success' => true,
+                    'message' => 'Fatura ja estava paga',
+                    'data' => ['invoice_id' => $invoiceId],
+                ]);
+                return;
+            }
+
+            Invoice::markPaid($invoiceId);
+
+            $this->logAuditAction('billing', 'invoice', $invoiceId, 'mark_paid', [
+                'old_status' => (string)($invoice['status'] ?? ''),
+                'new_status' => 'paid',
+            ], (int)($invoice['company_id'] ?? 0));
+
+            $this->respond(200, [
+                'success' => true,
+                'message' => 'Fatura marcada como paga',
+                'data' => ['invoice_id' => $invoiceId],
+            ]);
+        } catch (\Throwable $e) {
+            $this->respond(500, ['success' => false, 'message' => 'Falha ao marcar fatura como paga']);
+        }
+    }
+
     // ─── GET /api/superadmin/logout ───────────────────────────────────────────
 
     public function logout(): void
@@ -2080,7 +3180,7 @@ class SuperAdminDashboardApiController
         try {
             $db   = Database::getInstance();
             $stmt = $db->prepare("
-                SELECT DISTINCT p.name
+                SELECT DISTINCT p.permission_key
                 FROM permissions p
                 JOIN role_permissions rp ON rp.permission_id = p.id
                 JOIN roles r ON r.id = rp.role_id
@@ -2104,6 +3204,35 @@ class SuperAdminDashboardApiController
         }
     }
 
+    private function requireBillingPermission(string $permissionKey): array
+    {
+        $claims = SuperAdminJwtMiddleware::authenticate();
+
+        if (($claims['auth_source'] ?? '') === 'super_admins') {
+            return $claims;
+        }
+
+        if (($claims['role'] ?? '') !== 'root') {
+            $this->respond(403, ['success' => false, 'message' => 'Acesso negado']);
+        }
+
+        $userId = (int)($claims['sub'] ?? 0);
+        if ($userId < 1) {
+            $this->respond(403, ['success' => false, 'message' => 'Acesso negado']);
+        }
+
+        $permissions = $this->getUserPermissions($userId);
+        if (!in_array($permissionKey, $permissions, true)) {
+            $this->respond(403, [
+                'success' => false,
+                'message' => 'Acesso negado',
+                'permission' => $permissionKey,
+            ]);
+        }
+
+        return $claims;
+    }
+
     private function getAllPermissions(): array
     {
         return [
@@ -2114,12 +3243,62 @@ class SuperAdminDashboardApiController
             'system.view', 'audit.view', 'permissions.view',
             'permissions.manage', 'feature_flags.view', 'feature_flags.manage',
             'analytics.view', 'settings.view', 'settings.manage', 'impersonate',
+            'observability.read', 'observability.run_checks',
+            'events.read', 'events.dispatch',
+            'billing.read', 'billing.manage',
         ];
     }
 
     private function requireJson(): void
     {
         header('Content-Type: application/json; charset=utf-8');
+    }
+
+    private function invalidateStoreCaches(int $companyId, string $slug = ''): void
+    {
+        try {
+            SmartCache::init();
+            SmartCache::forget('company:id:' . $companyId);
+            SmartCache::forgetByPattern('companies:*');
+
+            $normalizedSlug = strtolower(trim($slug));
+            if ($normalizedSlug !== '') {
+                SmartCache::forget('company:slug:' . $normalizedSlug);
+                SmartCache::forget('company:slug:' . str_replace('_', '-', $normalizedSlug));
+                SmartCache::forget('company:slug:' . str_replace('-', '_', $normalizedSlug));
+            }
+        } catch (\Throwable $e) {
+            // Cache invalidação é best-effort
+        }
+    }
+
+    private function logAuditAction(string $module, string $entityType, int $entityId, string $action, array $description, ?int $companyId = null): void
+    {
+        try {
+            $claims = SuperAdminJwtMiddleware::authenticate();
+            $actorId = (int)($claims['sub'] ?? 0);
+
+            if ($actorId <= 0) {
+                return;
+            }
+
+            $db = Database::getInstance();
+            $logStmt = $db->prepare(
+                'INSERT INTO audit_logs (super_admin_id, module, entity_type, entity_id, action, description, company_id, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())'
+            );
+            $logStmt->execute([
+                $actorId,
+                $module,
+                $entityType,
+                $entityId,
+                $action,
+                json_encode($description, JSON_UNESCAPED_UNICODE),
+                $companyId,
+            ]);
+        } catch (\Throwable $e) {
+            // Auditoria é best-effort
+        }
     }
 
     /**

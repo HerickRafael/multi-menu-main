@@ -296,12 +296,25 @@ class AdminEvolutionController extends Controller
 
     public function instances($params)
     {
-        [$u,$company] = $this->guard($params['slug']);
-        
-        // CARREGAR A VIEW DE INSTÂNCIAS - DADOS VÊM VIA AJAX DO instancesData()
-        // Não precisamos buscar dados aqui, a view usa JavaScript para carregar via AJAX
-        
-        return $this->view('admin/evolution/instances', compact('company'));
+        [$u, $company] = $this->guard($params['slug']);
+        $slug = (string)$company['slug'];
+
+        $payload = [
+            'has_credentials' => !empty($company['evolution_server_url']) && !empty($company['evolution_api_key']),
+            'urls' => [
+                'instances_data' => '/admin/' . rawurlencode($slug) . '/evolution/instances/data',
+                'create' => '/admin/' . rawurlencode($slug) . '/evolution/create',
+                'sync' => '/admin/' . rawurlencode($slug) . '/evolution/sync',
+                'import_remote' => '/admin/' . rawurlencode($slug) . '/evolution/import',
+                'fetch_and_import' => '/admin/' . rawurlencode($slug) . '/evolution/fetch',
+                'refresh_qr' => '/admin/' . rawurlencode($slug) . '/evolution/refresh',
+                'delete' => '/admin/' . rawurlencode($slug) . '/evolution/delete',
+                'instance_base' => '/admin/' . rawurlencode($slug) . '/evolution/instance/',
+                'settings' => '/admin/' . rawurlencode($slug) . '/settings',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_EVOLUTION__', $payload);
     }
     
     /**

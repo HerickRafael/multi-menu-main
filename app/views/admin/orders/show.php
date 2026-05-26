@@ -360,74 +360,34 @@ $breadcrumbs = [
     ['label' => 'Detalhes #' . (int)$orderNumber]
 ];
 
-// Preparar conteúdo extra para ações
-ob_start();
-?>
-<div class="flex items-center gap-2">
-  <?= status_pill($st, $statusLabels[$st] ?? ucfirst($st)) ?>
-  <?php if ($wa): ?>
-    <a href="<?= e($wa) ?>" target="_blank" rel="noopener"
-       class="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-medium text-emerald-700 shadow-sm hover:bg-emerald-50">
-      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M7 20l1.5-4.5a7 7 0 1 1 2.5 2.5L7 20z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      WhatsApp
-    </a>
-  <?php endif; ?>
-  <?php if ($canEdit): ?>
-    <a href="<?= e(base_url('admin/' . $slug . '/orders/' . (int)($o['id'] ?? 0) . '/edit')) ?>"
-       class="inline-flex items-center gap-2 rounded-xl border border-indigo-300 bg-white px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm hover:bg-indigo-50">
-      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Editar
-    </a>
-  <?php endif; ?>
-  <form method="post"
-        action="<?= e(base_url('admin/' . $slug . '/orders/' . (int)($o['id'] ?? 0) . '/del')) ?>"
-        class="inline"
-        onsubmit="return confirm('Excluir pedido?');">
-    <?php if (function_exists('csrf_field')): ?>
-      <?= csrf_field() ?>
-    <?php elseif (function_exists('csrf_token')): ?>
-      <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-    <?php endif; ?>
-    <button class="inline-flex items-center gap-2 rounded-xl border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50">
-      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M6 7h12M9 7v11m6-11v11M8 7l1-2h6l1 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      Excluir
-    </button>
-  </form>
-  <a href="<?= base_url('admin/' . e($activeSlug) . '/orders/print?id=' . (int)$o['id']) ?>"
-     target="_blank"
-     class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50">
-    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M7 9V4h10v5M7 14H5a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-2m-10 0h10v6H7v-6Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    Imprimir
-  </a>
-</div>
-<?php
-$extraHeaderContent = ob_get_clean();
+$orderId = (int)($o['id'] ?? 0);
 $actions = [];
+if ($wa) {
+    $actions[] = [
+        'label' => 'WhatsApp',
+        'url' => $wa,
+        'icon' => '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M7 20l1.5-4.5a7 7 0 1 1 2.5 2.5L7 20z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    ];
+}
+if ($canEdit) {
+    $actions[] = [
+        'label' => 'Editar',
+        'url' => base_url('admin/' . $slug . '/orders/' . $orderId . '/edit'),
+        'icon' => '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    ];
+}
+$actions[] = [
+    'label' => 'Imprimir',
+    'url' => base_url('admin/' . $activeSlug . '/orders/print?id=' . $orderId),
+    'icon' => '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M7 9V4h10v5M7 14H5a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-2m-10 0h10v6H7v-6Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+];
 ?>
-<div class="mx-auto max-w-5xl p-4 admin-screen-only">
+<div class="mx-auto max-w-6xl p-4 admin-screen-only">
   <?php include __DIR__ . '/../components/page-header.php'; ?>
 
-  <!-- STATUS: formulário -->
-  <form method="post" action="<?= e(base_url('admin/' . $slug . '/orders/setStatus')) ?>"
-        class="mb-4 inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-    <?php if (function_exists('csrf_field')): ?>
-      <?= csrf_field() ?>
-    <?php elseif (function_exists('csrf_token')): ?>
-      <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-    <?php endif; ?>
-    <input type="hidden" name="id" value="<?= (int)($o['id'] ?? 0) ?>">
-    <label class="text-sm text-slate-700">Atualizar status:</label>
-    <select name="status" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:ring-2 focus:ring-indigo-400">
-      <?php foreach ($statusLabels as $k => $label): ?>
-        <option value="<?= e($k) ?>" <?= ($o['status'] ?? '') === $k ? 'selected' : '' ?>><?= e($label) ?></option>
-      <?php endforeach; ?>
-    </select>
-    <button class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50">
-      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M20 7 9 18l-5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Aplicar
-    </button>
-    
-    <!-- Badge de origem -->
+  <!-- META: Status, Origem e Data -->
+  <div class="mb-4 flex flex-wrap items-center gap-2 text-sm">
+    <?= status_pill($st, $statusLabels[$st] ?? ucfirst($st)) ?>
     <?php if ($orderSource === 'ifood'): ?>
       <span class="inline-flex items-center gap-1 rounded-lg bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -453,11 +413,10 @@ $actions = [];
         Manual
       </span>
     <?php endif; ?>
-    
     <?php if (!empty($o['created_at'])): ?>
       <span class="ml-auto text-xs text-slate-500">Criado em: <?= e($o['created_at']) ?></span>
     <?php endif; ?>
-  </form>
+  </div>
 
   <!-- CARDS: Cliente & Resumo -->
   <div class="mb-6 grid gap-4 md:grid-cols-2">
@@ -498,7 +457,25 @@ $actions = [];
         <div class="text-sm text-slate-600">Total</div>
         <div class="text-xl font-semibold text-slate-900">R$ <?= number_format((float)($o['total'] ?? 0), 2, ',', '.') ?></div>
       </div>
-      <div class="mt-2 text-xs text-slate-500">Status atual: <?= e($statusLabels[$st] ?? ucfirst($st)) ?></div>
+      <form method="post" action="<?= e(base_url('admin/' . $slug . '/orders/setStatus')) ?>"
+            class="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+        <?php if (function_exists('csrf_field')): ?>
+          <?= csrf_field() ?>
+        <?php elseif (function_exists('csrf_token')): ?>
+          <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+        <?php endif; ?>
+        <input type="hidden" name="id" value="<?= (int)($o['id'] ?? 0) ?>">
+        <label class="text-xs font-medium text-slate-600">Atualizar status:</label>
+        <select name="status" class="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:ring-2 focus:ring-indigo-400">
+          <?php foreach ($statusLabels as $k => $label): ?>
+            <option value="<?= e($k) ?>" <?= ($o['status'] ?? '') === $k ? 'selected' : '' ?>><?= e($label) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <button class="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm hover:bg-slate-50">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M20 7 9 18l-5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Aplicar
+        </button>
+      </form>
       <?php if (!empty($paymentMethodName)): ?>
         <div class="mt-2 flex items-center gap-2">
           <?php if ($pmBrandIcon): ?>
@@ -1194,6 +1171,23 @@ $actions = [];
       </div>
     </div>
   <?php endif; ?>
+
+  <!-- DANGER ZONE -->
+  <div class="mt-6 flex justify-end">
+    <form method="post"
+          action="<?= e(base_url('admin/' . $slug . '/orders/' . (int)($o['id'] ?? 0) . '/del')) ?>"
+          onsubmit="return confirm('Excluir pedido?');">
+      <?php if (function_exists('csrf_field')): ?>
+        <?= csrf_field() ?>
+      <?php elseif (function_exists('csrf_token')): ?>
+        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+      <?php endif; ?>
+      <button class="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 transition">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M6 7h12M9 7v11m6-11v11M8 7l1-2h6l1 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Excluir pedido
+      </button>
+    </form>
+  </div>
 </div>
 
 <?php

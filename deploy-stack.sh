@@ -26,10 +26,20 @@ CONTAINER_ID=""
 
 # [FIX #5] Lock — evita dois deploys/syncs concorrentes deixarem container em estado misto
 LOCK_FILE="/tmp/deploy-${STACK_NAME}.lock"
-exec 9>"$LOCK_FILE"
-if ! flock -n 9; then
-    echo "❌ Outro deploy já está em execução. Aguarde terminar antes de rodar novamente."
-    exit 1
+LOCK_DIR=""
+if command -v flock >/dev/null 2>&1; then
+    exec 9>"$LOCK_FILE"
+    if ! flock -n 9; then
+        echo "❌ Outro deploy já está em execução. Aguarde terminar antes de rodar novamente."
+        exit 1
+    fi
+else
+    LOCK_DIR="${LOCK_FILE}.dir"
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+        echo "❌ Outro deploy já está em execução. Aguarde terminar antes de rodar novamente."
+        exit 1
+    fi
+    trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
 fi
 
 # Cores para output
@@ -135,6 +145,16 @@ sync_files() {
 
     echo -e "${CYAN}   → Public Assets...${NC}"
     docker cp public/assets/. "${CONTAINER_ID}:/var/www/html/public/assets/"
+
+    echo -e "${CYAN}   → Public Superadmin assets...${NC}"
+    if [ -d "public/superadmin/assets" ]; then
+        docker cp public/superadmin/assets/. "${CONTAINER_ID}:/var/www/html/public/superadmin/assets/"
+    fi
+
+    echo -e "${CYAN}   → Public Superadmin HTML...${NC}"
+    if [ -f "public/superadmin/index.html" ]; then
+        docker cp "public/superadmin/index.html" "${CONTAINER_ID}:/var/www/html/public/superadmin/index.html"
+    fi
 
     echo -e "${CYAN}   → Public Root (SW, manifests)...${NC}"
     for f in public/*.js public/*.php public/*.webmanifest; do

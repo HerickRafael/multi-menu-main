@@ -22,23 +22,16 @@ class SuperAdminMiddleware
             self::$sessionRegeneratedThisRequest = true;
         }
 
-        $id = isset($_SESSION['super_admin_id']) ? (int) $_SESSION['super_admin_id'] : 0;
+        Auth::requireSuperAdmin();
 
-        if ($id < 1) {
-            $_SESSION['superadmin_flash'] = [
-                'type' => 'error',
-                'message' => 'Faça login para continuar.',
-            ];
-            header('Location: ' . base_url('superadmin/login'));
-            exit;
-        }
+        $id = (int)(Auth::superAdminId() ?? 0);
 
         require_once __DIR__ . '/../models/SuperAdmin.php';
 
         $admin = SuperAdmin::findActiveById($id);
 
         if (!$admin) {
-            unset($_SESSION['super_admin_id'], $_SESSION['super_admin_name']);
+            Auth::logoutSuperAdmin();
             $_SESSION['superadmin_flash'] = [
                 'type' => 'error',
                 'message' => 'Sessão inválida ou conta desativada.',

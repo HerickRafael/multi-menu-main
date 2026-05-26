@@ -40,15 +40,23 @@ if (!function_exists('e')) {
 if (!function_exists('base_url')) {
     function base_url(string $path = ''): string
     {
-        $config = config('base_url');
+        // When behind a reverse proxy or tunnel (e.g. Cloudflare Tunnel, nginx),
+        // use forwarded headers to build the correct public-facing URL.
+        $forwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+        $requestHost    = $_SERVER['HTTP_HOST'] ?? '';
 
-        if (!$config) {
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-                   || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https')
-                      ? 'https' : 'http';
-            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-            $dir = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
-            $config = $scheme . '://' . $host . ($dir ? $dir : '');
+        if ($forwardedProto !== '' && $requestHost !== '') {
+            $scheme = strtolower(trim($forwardedProto)) === 'https' ? 'https' : 'http';
+            $config = $scheme . '://' . $requestHost;
+        } else {
+            $config = config('base_url');
+
+            if (!$config) {
+                $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                $host   = $requestHost ?: 'localhost';
+                $dir    = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
+                $config = $scheme . '://' . $host . ($dir ? $dir : '');
+            }
         }
 
         $base = rtrim($config, '/');

@@ -79,17 +79,28 @@ class AdminAnalyticsController
             ];
         }, 300); // Cache por 5 minutos
         
-        $data = array_merge([
-            'company' => $company,
-            'user' => $user,
+        $payload = [
             'period' => $period,
-            'startDate' => $startDate,
-            'endDate' => $endDate,
-        ], $metrics);
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'summary' => $metrics['summary'] ?? [],
+            'today_sales' => $metrics['todaySales'] ?? [],
+            'sales_by_day' => $metrics['salesByDay'] ?? [],
+            'sales_by_hour' => $metrics['salesByHour'] ?? [],
+            'sales_by_weekday' => $metrics['salesByWeekday'] ?? [],
+            'payment_methods' => $metrics['paymentMethods'] ?? [],
+            'top_products' => $metrics['topProducts'] ?? [],
+            'recent_orders' => $metrics['recentOrders'] ?? [],
+            'page_views' => $metrics['pageViews'] ?? [],
+            'conversion_funnel' => $metrics['conversionFunnel'] ?? [],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/analytics',
+                'data' => '/admin/' . rawurlencode($slug) . '/analytics/data',
+                'orders_base' => '/admin/' . rawurlencode($slug) . '/orders/',
+            ],
+        ];
 
-        extract($data);
-
-        require __DIR__ . '/../views/admin/analytics/index.php';
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_ANALYTICS__', $payload);
     }
 
     /**

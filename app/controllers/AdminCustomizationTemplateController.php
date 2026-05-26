@@ -45,15 +45,39 @@ class AdminCustomizationTemplateController extends Controller
     public function index(array $params): void
     {
         [$user, $company] = $this->guard($params['slug']);
-        
+        $slug = (string)$company['slug'];
         $templates = CustomizationTemplate::allWithUsageCount((int)$company['id'], false);
-        
-        $this->view('admin/customization-templates/index', [
-            'user' => $user,
-            'company' => $company,
-            'templates' => $templates,
-            'pageTitle' => 'Grupos de Personalização'
-        ]);
+
+        $payload = [
+            'templates' => array_map(static function (array $t): array {
+                return [
+                    'id' => (int)$t['id'],
+                    'name' => (string)($t['name'] ?? ''),
+                    'type' => (string)($t['type'] ?? 'extra'),
+                    'min_qty' => (int)($t['min_qty'] ?? 0),
+                    'max_qty' => (int)($t['max_qty'] ?? 99),
+                    'active' => (int)($t['active'] ?? 0) === 1,
+                    'hide_duplicates' => (int)($t['hide_duplicates'] ?? 0) === 1,
+                    'items_count' => (int)($t['items_count'] ?? 0),
+                    'usage_count' => (int)($t['usage_count'] ?? 0),
+                    'updated_at' => (string)($t['updated_at'] ?? ''),
+                ];
+            }, $templates),
+            'flash' => [
+                'error' => $_SESSION['flash_error'] ?? null,
+                'success' => $_SESSION['flash_success'] ?? null,
+            ],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/customization-templates',
+                'create' => '/admin/' . rawurlencode($slug) . '/customization-templates/create',
+                'edit_base' => '/admin/' . rawurlencode($slug) . '/customization-templates/',
+                'toggle_base' => '/admin/' . rawurlencode($slug) . '/customization-templates/',
+                'destroy_base' => '/admin/' . rawurlencode($slug) . '/customization-templates/',
+            ],
+        ];
+
+        unset($_SESSION['flash_error'], $_SESSION['flash_success']);
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_CT_LIST__', $payload);
     }
 
     /**
@@ -62,16 +86,10 @@ class AdminCustomizationTemplateController extends Controller
     public function create(array $params): void
     {
         [$user, $company] = $this->guard($params['slug']);
-        
+        $slug = (string)$company['slug'];
         $ingredients = Ingredient::allForCompany((int)$company['id']);
-        
-        $this->view('admin/customization-templates/form', [
-            'user' => $user,
-            'company' => $company,
-            'template' => null,
-            'ingredients' => $ingredients,
-            'pageTitle' => 'Novo Grupo de Personalização'
-        ]);
+
+        $this->renderTemplateFormSpa($slug, $company, null, $ingredients, []);
     }
 
     /**
@@ -80,25 +98,94 @@ class AdminCustomizationTemplateController extends Controller
     public function edit(array $params): void
     {
         [$user, $company] = $this->guard($params['slug']);
-        
+        $slug = (string)$company['slug'];
         $template = CustomizationTemplate::findWithItems((int)$params['id']);
-        
+
         if (!$template || (int)$template['company_id'] !== (int)$company['id']) {
-            header('Location: ' . base_url('admin/' . rawurlencode($params['slug']) . '/customization-templates'));
+            header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/customization-templates'));
             exit;
         }
-        
+
         $ingredients = Ingredient::allForCompany((int)$company['id']);
         $productsUsing = CustomizationTemplate::getProductsUsingTemplate((int)$params['id']);
-        
-        $this->view('admin/customization-templates/form', [
-            'user' => $user,
-            'company' => $company,
-            'template' => $template,
-            'ingredients' => $ingredients,
-            'productsUsing' => $productsUsing,
-            'pageTitle' => 'Editar Grupo: ' . $template['name']
-        ]);
+
+        $this->renderTemplateFormSpa($slug, $company, $template, $ingredients, $productsUsing);
+    }
+
+    /**
+     * @param array<string, mixed> $company
+     * @param array<string, mixed>|null $template
+     * @param array<int, array<string, mixed>> $ingredients
+     * @param array<int, array<string, mixed>> $productsUsing
+     */
+    private function renderTemplateFormSpa(string $slug, array $company, ?array $template, array $ingredients, array $productsUsing): void
+    {
+        $isEdit = $template !== null;
+        $items = is_array($template['items'] ?? null) ? $template['items'] : [];
+
+        $payload = [
+            'is_edit' => $isEdit,
+            'template' => $isEdit ? [
+                'id' => (int)$template['id'],
+                'name' => (string)($template['name'] ?? ''),
+                'type' => (string)($template['type'] ?? 'extra'),
+                'min_qty' => (int)($template['min_qty'] ?? 0),
+                'max_qty' => (int)($template['max_qty'] ?? 99),
+                'active' => (int)($template['active'] ?? 0) === 1,
+                'hide_duplicates' => (int)($template['hide_duplicates'] ?? 0) === 1,
+                'items' => array_map(static function (array $it): array {
+                    return [
+                        'id' => isset($it['id']) ? (int)$it['id'] : null,
+                        'ingredient_id' => isset($it['ingredient_id']) && $it['ingredient_id'] !== null ? (int)$it['ingredient_id'] : null,
+                        'ingredient_name' => (string)($it['ingredient_name'] ?? ''),
+                        'label' => (string)($it['label'] ?? ''),
+                        'delta' => isset($it['delta']) ? (float)$it['delta'] : 0,
+                        'is_default' => (int)($it['is_default'] ?? 0) === 1,
+                        'default_qty' => (int)($it['default_qty'] ?? 0),
+                        'min_qty' => (int)($it['min_qty'] ?? 0),
+                        'max_qty' => (int)($it['max_qty'] ?? 1),
+                        'sort_order' => (int)($it['sort_order'] ?? 0),
+                    ];
+                }, $items),
+            ] : [
+                'id' => null,
+                'name' => '',
+                'type' => 'extra',
+                'min_qty' => 0,
+                'max_qty' => 99,
+                'active' => true,
+                'hide_duplicates' => false,
+                'items' => [],
+            ],
+            'ingredients' => array_map(static function (array $i): array {
+                return [
+                    'id' => (int)$i['id'],
+                    'name' => (string)($i['name'] ?? ''),
+                    'internal_name' => (string)($i['internal_name'] ?? ''),
+                    'sale_price' => isset($i['sale_price']) ? (float)$i['sale_price'] : 0,
+                    'image_path' => (string)($i['image_path'] ?? ''),
+                ];
+            }, $ingredients),
+            'products_using' => array_map(static function (array $p): array {
+                return [
+                    'id' => (int)$p['id'],
+                    'name' => (string)($p['name'] ?? ''),
+                ];
+            }, $productsUsing),
+            'flash' => ['error' => $_SESSION['flash_error'] ?? null],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/customization-templates',
+                'submit' => $isEdit
+                    ? '/admin/' . rawurlencode($slug) . '/customization-templates/' . (int)$template['id']
+                    : '/admin/' . rawurlencode($slug) . '/customization-templates',
+                'destroy' => $isEdit
+                    ? '/admin/' . rawurlencode($slug) . '/customization-templates/' . (int)$template['id'] . '/del'
+                    : null,
+            ],
+        ];
+
+        unset($_SESSION['flash_error']);
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_CT_FORM__', $payload);
     }
 
     /**

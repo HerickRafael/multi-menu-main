@@ -472,7 +472,7 @@ Praticas detectadas:
 Evidencias:
 - app/controllers/PublicCartController.php
 - app/controllers/WebhookIFoodController.php
-- REGRESSION-REPORT.md
+- docs/REGRESSION-REPORT.md
 - validate-fixes.sh
 
 Risco:
@@ -554,7 +554,7 @@ Risco:
 Artefatos existentes de apoio:
 - playwright.config.js
 - test-results/
-- REGRESSION-REPORT.md
+- docs/REGRESSION-REPORT.md
 - validate-fixes.sh
 
 ---

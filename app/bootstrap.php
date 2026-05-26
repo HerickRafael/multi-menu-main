@@ -58,6 +58,7 @@ require_once APP_PATH . '/core/Helpers.php';
 require_once APP_PATH . '/core/CommonHelpers.php';
 require_once APP_PATH . '/core/Database.php';
 require_once APP_PATH . '/core/SessionManager.php';
+require_once APP_PATH . '/core/ServiceContainer.php';
 require_once APP_PATH . '/core/Controller.php';
 require_once APP_PATH . '/core/Auth.php';
 require_once APP_PATH . '/core/AuthCustomer.php';
@@ -65,6 +66,31 @@ require_once APP_PATH . '/core/Router.php';
 require_once APP_PATH . '/core/ErrorHandler.php';
 
 ErrorHandler::register();
+
+if (!function_exists('app_container')) {
+    function app_container(): ServiceContainer
+    {
+        global $appContainer;
+
+        if (!$appContainer instanceof ServiceContainer) {
+            $appContainer = new ServiceContainer();
+        }
+
+        return $appContainer;
+    }
+}
+
+$appContainer = app_container();
+
+$appContainer->singleton('whatsapp.send', static function (): WhatsAppSendService {
+    require_once APP_PATH . '/services/WhatsAppSendService.php';
+    return WhatsAppSendService::getInstance();
+});
+
+$appContainer->set('customer.engagement', static function (ServiceContainer $container, int $companyId): CustomerEngagementService {
+    require_once APP_PATH . '/services/CustomerEngagementService.php';
+    return new CustomerEngagementService($companyId);
+});
 
 // ============================================================================
 // 📦 MODELS - Modelos de dados

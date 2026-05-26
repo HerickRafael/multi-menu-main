@@ -55,21 +55,47 @@ class AdminPackagingController extends Controller
         $slug = trim((string)($params['slug'] ?? ''));
         [$user, $company] = $this->guard($slug);
         $companyId = (int)$company['id'];
-        $activeSlug = $slug;
-        
-        // Lista todos os insumos (ativos e inativos para admin)
+
         $supplies = PackagingSupply::listByCompany($companyId, false);
-        
-        // Adicionar contagem de produtos para cada insumo
         foreach ($supplies as &$supply) {
             $supply['product_count'] = PackagingSupply::countProductsUsing((int)$supply['id']);
         }
-        unset($supply); // IMPORTANTE: remover a referência para evitar bugs no foreach da view
-        
-        $success = $_GET['success'] ?? null;
-        $error = $_GET['error'] ?? null;
+        unset($supply);
 
-        require __DIR__ . '/../views/admin/packaging/index.php';
+        $success = isset($_GET['success']) ? (string)$_GET['success'] : null;
+        $error = isset($_GET['error']) ? (string)$_GET['error'] : null;
+
+        $toFloat = static fn($v) => $v === null || $v === '' ? 0.0 : (float)$v;
+
+        $payload = [
+            'supplies' => array_map(static function ($s) use ($toFloat) {
+                $stock = $toFloat($s['stock_quantity'] ?? 0);
+                $minStock = $toFloat($s['min_stock_alert'] ?? 0);
+                return [
+                    'id' => (int)($s['id'] ?? 0),
+                    'name' => (string)($s['name'] ?? ''),
+                    'description' => (string)($s['description'] ?? ''),
+                    'unit' => (string)($s['unit'] ?? 'un'),
+                    'cost_per_unit' => $toFloat($s['cost_per_unit'] ?? 0),
+                    'stock_quantity' => $stock,
+                    'min_stock_alert' => $minStock,
+                    'supplier' => (string)($s['supplier'] ?? ''),
+                    'active' => (int)($s['active'] ?? 0) === 1,
+                    'product_count' => (int)($s['product_count'] ?? 0),
+                    'low_stock' => $minStock > 0 && $stock <= $minStock,
+                ];
+            }, $supplies),
+            'flash' => ['success' => $success, 'error' => $error],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/packaging',
+                'create' => '/admin/' . rawurlencode($slug) . '/packaging/create',
+                'store' => '/admin/' . rawurlencode($slug) . '/packaging/store',
+                'edit_base' => '/admin/' . rawurlencode($slug) . '/packaging/',
+                'destroy_base' => '/admin/' . rawurlencode($slug) . '/packaging/',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_PACKAGING__', $payload);
     }
 
     /**
@@ -79,13 +105,7 @@ class AdminPackagingController extends Controller
     {
         $slug = trim((string)($params['slug'] ?? ''));
         [$user, $company] = $this->guard($slug);
-        $companyId = (int)$company['id'];
-        $activeSlug = $slug;
-        
-        $supply = null;
-        $isEdit = false;
-
-        require __DIR__ . '/../views/admin/packaging/form.php';
+        $this->renderPackagingFormSpa($slug, $company, null, []);
     }
 
     /**
@@ -97,19 +117,66 @@ class AdminPackagingController extends Controller
         $id = (int)($params['id'] ?? 0);
         [$user, $company] = $this->guard($slug);
         $companyId = (int)$company['id'];
-        $activeSlug = $slug;
-        
+
         $supply = PackagingSupply::findByCompany($id, $companyId);
-        
         if (!$supply) {
             header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/packaging?error=notfound'));
             exit;
         }
-        
-        $isEdit = true;
-        $products = PackagingSupply::getProductsUsing($id);
 
-        require __DIR__ . '/../views/admin/packaging/form.php';
+        $products = PackagingSupply::getProductsUsing($id);
+        $this->renderPackagingFormSpa($slug, $company, $supply, $products);
+    }
+
+    /**
+     * @param array<string, mixed> $company
+     * @param array<string, mixed>|null $supply
+     * @param array<int, array<string, mixed>> $products
+     */
+    private function renderPackagingFormSpa(string $slug, array $company, ?array $supply, array $products): void
+    {
+        $isEdit = $supply !== null;
+        $toFloat = static fn($v) => $v === null || $v === '' ? 0.0 : (float)$v;
+
+        $payload = [
+            'is_edit' => $isEdit,
+            'supply' => $isEdit ? [
+                'id' => (int)($supply['id'] ?? 0),
+                'name' => (string)($supply['name'] ?? ''),
+                'description' => (string)($supply['description'] ?? ''),
+                'unit' => (string)($supply['unit'] ?? 'un'),
+                'cost_per_unit' => $toFloat($supply['cost_per_unit'] ?? 0),
+                'stock_quantity' => $toFloat($supply['stock_quantity'] ?? 0),
+                'min_stock_alert' => $toFloat($supply['min_stock_alert'] ?? 0),
+                'supplier' => (string)($supply['supplier'] ?? ''),
+                'active' => (int)($supply['active'] ?? 1) === 1,
+            ] : [
+                'id' => null,
+                'name' => '',
+                'description' => '',
+                'unit' => 'un',
+                'cost_per_unit' => 0,
+                'stock_quantity' => 0,
+                'min_stock_alert' => 0,
+                'supplier' => '',
+                'active' => true,
+            ],
+            'products' => array_map(static function ($p) {
+                return [
+                    'id' => (int)($p['id'] ?? $p['product_id'] ?? 0),
+                    'name' => (string)($p['name'] ?? $p['product_name'] ?? ''),
+                ];
+            }, $products),
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/packaging',
+                'submit' => '/admin/' . rawurlencode($slug) . '/packaging/store',
+                'destroy' => $isEdit
+                    ? '/admin/' . rawurlencode($slug) . '/packaging/' . (int)$supply['id'] . '/delete'
+                    : null,
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_PACKAGING_FORM__', $payload);
     }
 
     /**

@@ -344,7 +344,7 @@ class PublicProfileController extends Controller
         $personal = $st->fetch(PDO::FETCH_ASSOC);
 
         // Endereços
-        $st = $db->prepare('SELECT street, number, complement, neighborhood, city, state, zip_code, label FROM customer_addresses WHERE customer_id = ?');
+        $st = $db->prepare('SELECT label, name, phone, city, neighborhood, street, number, complement, reference FROM customer_addresses WHERE customer_id = ?');
         $st->execute([$customerId]);
         $addresses = $st->fetchAll(PDO::FETCH_ASSOC);
 

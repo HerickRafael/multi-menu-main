@@ -9,7 +9,7 @@ class MobileAdminGuard
      *
      * @return array{0: array, 1: array}
      */
-    public static function requireCompanyAccess(): array
+    public static function requireCompanyAccess(?string $permissionKey = null): array
     {
         Auth::start();
 
@@ -28,14 +28,17 @@ class MobileAdminGuard
         }
 
         $user = Auth::user();
-        $isRoot = ($user['role'] === 'root');
-        if (!$isRoot && (int)$user['company_id'] !== (int)$company['id']) {
+        if (!Auth::hasCompanyAccess((int)$company['id'], $user)) {
             http_response_code(403);
             echo 'Acesso negado';
             exit;
         }
 
         Auth::setActiveCompany((int)$company['id'], (string)($company['slug'] ?? $slug));
+
+        if ($permissionKey !== null) {
+            Auth::requirePermission($permissionKey, $user, (int)$company['id']);
+        }
 
         return [$user, $company];
     }

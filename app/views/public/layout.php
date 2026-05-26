@@ -43,7 +43,7 @@ $layoutIsLogged = !empty($layoutCustomer);
   // Preparar dados para Open Graph
   $ogTitle = e(($company['name'] ?? 'Cardápio') . ' - Cardápio');
   $ogDescription = e(($company['name'] ?? 'Cardápio') . ' - Cardápio digital. Faça seu pedido online!');
-  $ogUrl = rtrim(config('base_url') ?: 'https://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'), '/') . ($_SERVER['REQUEST_URI'] ?? '/');
+  $ogUrl = rtrim(base_url(), '/') . ($_SERVER['REQUEST_URI'] ?? '/');
   $ogImage = !empty($company['logo']) ? base_url($company['logo']) : base_url('assets/icons/icon-512x512.png');
   $ogSiteName = e($company['name'] ?? 'Cardápio Digital');
   ?>

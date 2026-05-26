@@ -32,12 +32,17 @@ SubdomainDetector::initialize();
 // Serviços específicos de carrinho
 require_once __DIR__ . '/../app/services/CartStorage.php';
 require_once __DIR__ . '/../app/helpers/responsive_image_helper.php';
+require_once __DIR__ . '/../app/middleware/TenantContextMiddleware.php';
 
 // Registrar Error Handler Enterprise
 ErrorHandler::register();
 
 // Iniciar sessão com SessionManager Enterprise
 SessionManager::start();
+
+// Isolamento de tenant por rota/subdominio (admin/api/public)
+$tenantContext = TenantContextMiddleware::applyFromRequest($_SERVER['REQUEST_URI'] ?? '/');
+$requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
 $strictCsp = filter_var($_ENV['STRICT_CSP'] ?? getenv('STRICT_CSP') ?: '1', FILTER_VALIDATE_BOOLEAN);
 $cspPolicy = $strictCsp ? SecurityRequirements::contentSecurityPolicy() : null;
@@ -48,21 +53,44 @@ $cspPolicy = $strictCsp ? SecurityRequirements::contentSecurityPolicy() : null;
     'csp' => $cspPolicy,
 ]);
 
-// 🔐 Rate Limiter — proteção contra abuso (120 req/min por IP)
-if (!\App\Middleware\RateLimiter::check(null, 120, 60)) {
+// 🔐 Rate Limiter — proteção contra abuso
+$globalRateId = 'ip:' . get_client_ip();
+if (!\App\Middleware\RateLimiter::check($globalRateId, 1000, 60)) {
     http_response_code(429);
-    $info = \App\Middleware\RateLimiter::getInfo();
+    $info = \App\Middleware\RateLimiter::getInfo($globalRateId);
     header('Retry-After: ' . max(1, $info['reset'] - time()));
     header('Content-Type: application/json');
     echo json_encode(['error' => 'Too many requests. Try again later.']);
     exit;
 }
 
+$tenantRateId = 'tenant:' . (int)($tenantContext['company_id'] ?? 0);
+if (!\App\Middleware\RateLimiter::check($tenantRateId, 10000, 60)) {
+    http_response_code(429);
+    $info = \App\Middleware\RateLimiter::getInfo($tenantRateId);
+    header('Retry-After: ' . max(1, $info['reset'] - time()));
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Too many requests. Try again later.']);
+    exit;
+}
+
+$loginRoute = str_contains($requestUri, '/customer-login') || (str_contains($requestUri, '/admin/') && str_contains($requestUri, '/login'));
+if ($loginRoute) {
+    $loginRateId = 'login:' . $tenantRateId . '|ip:' . get_client_ip() . '|uri:' . sha1($requestUri);
+    if (!\App\Middleware\RateLimiter::check($loginRateId, 100, 60)) {
+        http_response_code(429);
+        $info = \App\Middleware\RateLimiter::getInfo($loginRateId);
+        header('Retry-After: ' . max(1, $info['reset'] - time()));
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Too many login attempts. Try again later.']);
+        exit;
+    }
+}
+
 // 🔐 CSRF Protection — validar token em POST/PUT/DELETE/PATCH
 // Exclui: webhooks, mobile-admin API, push, e API pública (token Bearer no host principal).
 // No subdomínio mobile, /api/* usa sessão: CSRF permanece obrigatório.
 $requestMethod = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 if (in_array($requestMethod, ['POST', 'PUT', 'DELETE', 'PATCH'], true)) {
     $csrfExcluded = (
         str_starts_with($requestUri, '/webhook/') ||

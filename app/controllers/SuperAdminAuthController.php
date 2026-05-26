@@ -13,7 +13,7 @@ class SuperAdminAuthController extends Controller
     {
         SessionManager::start();
 
-        if (!empty($_SESSION['super_admin_id'])) {
+        if (Auth::checkSuperAdmin()) {
             header('Location: ' . base_url('superadmin'));
             exit;
         }
@@ -65,9 +65,11 @@ class SuperAdminAuthController extends Controller
         }
 
         session_regenerate_id(true);
-
-        $_SESSION['super_admin_id'] = (int)$row['id'];
-        $_SESSION['super_admin_name'] = (string)$row['name'];
+        Auth::loginSuperAdmin([
+            'id' => (int)$row['id'],
+            'name' => (string)$row['name'],
+            'role' => 'root',
+        ]);
 
         SuperAdmin::touchLastLogin((int)$row['id']);
 
@@ -80,7 +82,7 @@ class SuperAdminAuthController extends Controller
     {
         SessionManager::start();
 
-        unset($_SESSION['super_admin_id'], $_SESSION['super_admin_name']);
+        Auth::logoutSuperAdmin();
 
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_regenerate_id(true);

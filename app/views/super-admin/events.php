@@ -6,6 +6,22 @@ include __DIR__ . '/layout.php';
 $rows = $data['rows'] ?? [];
 $page = (int)($data['page'] ?? 1);
 $totalPages = (int)($data['total_pages'] ?? 1);
+
+$queryBase = [];
+if (!empty($filters['event_name'])) {
+  $queryBase['event_name'] = (string)$filters['event_name'];
+}
+if (!empty($filters['source'])) {
+  $queryBase['source'] = (string)$filters['source'];
+}
+if (!empty($filters['company_id'])) {
+  $queryBase['company_id'] = (string)$filters['company_id'];
+}
+
+$buildEventsPageUrl = static function (int $targetPage) use ($queryBase): string {
+  $query = array_merge($queryBase, ['page' => $targetPage]);
+  return base_url('superadmin/events?' . http_build_query($query));
+};
 ?>
 
 <div class="toolbar" style="margin-bottom:1rem;">
@@ -15,6 +31,7 @@ $totalPages = (int)($data['total_pages'] ?? 1);
   </div>
   <div class="toolbar-right">
     <form method="post" action="<?= htmlspecialchars(base_url('superadmin/events/dispatch-test'), ENT_QUOTES, 'UTF-8') ?>" style="display:flex;gap:.4rem;align-items:center;">
+      <?= function_exists('csrf_field') ? csrf_field() : '' ?>
       <input type="number" min="1" name="company_id" value="1" style="width:90px;" placeholder="Company">
       <input type="number" min="1" name="instance_id" value="1" style="width:90px;" placeholder="Instance">
       <button class="btn secondary sm" type="submit">Disparar Evento Teste</button>
@@ -66,11 +83,11 @@ $totalPages = (int)($data['total_pages'] ?? 1);
 
 <div style="display:flex;justify-content:center;gap:.5rem;margin-top:1rem;">
   <?php if ($page > 1): ?>
-    <a class="btn secondary sm" href="<?= htmlspecialchars(base_url('superadmin/events?page=' . ($page - 1)), ENT_QUOTES, 'UTF-8') ?>">Anterior</a>
+    <a class="btn secondary sm" href="<?= htmlspecialchars($buildEventsPageUrl($page - 1), ENT_QUOTES, 'UTF-8') ?>">Anterior</a>
   <?php endif; ?>
   <span class="btn secondary sm" style="pointer-events:none;">Pagina <?= $page ?> de <?= $totalPages ?></span>
   <?php if ($page < $totalPages): ?>
-    <a class="btn secondary sm" href="<?= htmlspecialchars(base_url('superadmin/events?page=' . ($page + 1)), ENT_QUOTES, 'UTF-8') ?>">Proxima</a>
+    <a class="btn secondary sm" href="<?= htmlspecialchars($buildEventsPageUrl($page + 1), ENT_QUOTES, 'UTF-8') ?>">Proxima</a>
   <?php endif; ?>
 </div>
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../modules/auth/MobileAdminGuard.php';
+require_once __DIR__ . '/../modules/orders/OrderStatusService.php';
 
 /**
  * MobileApiController
@@ -119,34 +120,25 @@ class MobileApiController extends Controller
             $this->jsonError('ID do pedido inválido', 400);
         }
 
-        $validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
-        if (!in_array($status, $validStatuses)) {
-            $this->jsonError('Status inválido', 400);
-        }
-
         $db = db();
-        $order = Order::findBasic($db, $orderId, (int)$company['id']);
+        $result = OrderStatusService::updateForCompany($db, (int)$company['id'], $orderId, $status);
 
-        if (!$order) {
-            $this->jsonError('Pedido não encontrado', 404);
+        if (!empty($result['ok'])) {
+            $this->jsonSuccess([
+                'status' => $result['requested_status'] ?? $status,
+                'internal_status' => $result['internal_status'] ?? $status,
+            ]);
         }
 
-        // Mapeia para os status do sistema (se necessário)
-        $statusMap = [
-            'confirmed' => 'paid',
-            'delivered' => 'completed',
-            'cancelled' => 'canceled',
-        ];
-        $internalStatus = $statusMap[$status] ?? $status;
-
-        // Atualiza
-        $updated = Order::updateStatus($db, $orderId, (int)$company['id'], $internalStatus);
-
-        if ($updated) {
-            $this->jsonSuccess(['status' => $status]);
-        } else {
-            $this->jsonError('Falha ao atualizar status', 500);
+        $error = $result['error'] ?? 'Falha ao atualizar status';
+        $statusCode = 500;
+        if ($error === 'ID do pedido inválido' || $error === 'Status inválido') {
+            $statusCode = 400;
+        } elseif ($error === 'Pedido não encontrado') {
+            $statusCode = 404;
         }
+
+        $this->jsonError($error, $statusCode);
     }
 
     /**

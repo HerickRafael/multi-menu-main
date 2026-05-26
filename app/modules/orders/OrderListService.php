@@ -17,21 +17,24 @@ class OrderListService
         $source = $filters['source'] ?? null;
         $source = $source === '' ? null : $source;
 
+        $excludeSource = $filters['exclude_source'] ?? null;
+        $excludeSource = $excludeSource === '' ? null : $excludeSource;
+
         $search = $filters['search'] ?? null;
         $search = $search === '' ? null : $search;
 
         $page = max(1, (int)($filters['page'] ?? 1));
         $perPage = (int)($filters['per_page'] ?? 10);
-        $allowedPerPage = [10, 25, 50, 100];
+        $allowedPerPage = [10, 25, 50, 100, 200, 500];
         if (!in_array($perPage, $allowedPerPage, true)) {
             $perPage = 10;
         }
 
         $offset = ($page - 1) * $perPage;
 
-        $totalOrders = Order::countByCompany($db, $companyId, $status, $search, $source);
+        $totalOrders = Order::countByCompany($db, $companyId, $status, $search, $source, $excludeSource);
         $totalPages = max(1, (int)ceil($totalOrders / $perPage));
-        $orders = Order::listByCompany($db, $companyId, $status, $perPage, $offset, $search, $source);
+        $orders = Order::listByCompany($db, $companyId, $status, $perPage, $offset, $search, $source, $excludeSource);
 
         return [
             'orders' => $orders,

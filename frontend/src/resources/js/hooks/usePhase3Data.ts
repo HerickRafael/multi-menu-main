@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
-import { get } from '@/js/lib/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { del, get, post } from '@/js/lib/api'
 import { STALE_TIMES } from '@/js/lib/constants'
-import { queryKeyFactory } from '@/js/lib/queryKeyFactory'
+import { invalidateResourceQueries, queryKeyFactory } from '@/js/lib/queryKeyFactory'
 import { useTenant } from '@/js/contexts/TenantContext'
 import type {
   ApiEnvelope,
@@ -13,6 +14,9 @@ import type {
   StoreItem,
   StoresStats,
   UserItem,
+  UserDeletePayload,
+  UserPasswordPayload,
+  UserUpsertPayload,
   UsersStats,
 } from '@/js/types/phase3'
 
@@ -28,6 +32,8 @@ export interface ListFilters {
   date_to?: string
   role?: string
   active?: string
+  plan?: string
+  region?: string
 }
 
 function toParams(filters: ListFilters): Record<string, unknown> {
@@ -97,7 +103,12 @@ export function useOrdersData(filters: ListFilters) {
     },
     placeholderData: (previousData) => previousData,
     staleTime: STALE_TIMES.ORDERS,
-    refetchInterval: STALE_TIMES.ORDERS,
+    refetchInterval: () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return false
+      }
+      return STALE_TIMES.ORDERS
+    },
   })
 }
 
@@ -120,6 +131,71 @@ export function useUsersData(filters: ListFilters) {
     },
     placeholderData: (previousData) => previousData,
     staleTime: STALE_TIMES.USERS,
+  })
+}
+
+function invalidateUserManagementQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ predicate: invalidateResourceQueries('users') })
+  queryClient.invalidateQueries({ predicate: invalidateResourceQueries('stores') })
+}
+
+export function useCreateUserMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: UserUpsertPayload) => post<ApiEnvelope<{ message: string }>>('/users/create', payload),
+    onSuccess: (response) => {
+      toast.success(response.message ?? 'Usuário criado com sucesso')
+      invalidateUserManagementQueries(queryClient)
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      toast.error(error.response?.data?.message ?? 'Falha ao criar usuário')
+    },
+  })
+}
+
+export function useUpdateUserMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: UserUpsertPayload & { user_id: number }) => post<ApiEnvelope<{ message: string }>>('/users/update', payload),
+    onSuccess: (response) => {
+      toast.success(response.message ?? 'Usuário atualizado com sucesso')
+      invalidateUserManagementQueries(queryClient)
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      toast.error(error.response?.data?.message ?? 'Falha ao atualizar usuário')
+    },
+  })
+}
+
+export function useChangeUserPasswordMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: UserPasswordPayload) => post<ApiEnvelope<{ message: string }>>('/users/change-password', payload),
+    onSuccess: (response) => {
+      toast.success(response.message ?? 'Senha alterada com sucesso')
+      invalidateUserManagementQueries(queryClient)
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      toast.error(error.response?.data?.message ?? 'Falha ao alterar senha')
+    },
+  })
+}
+
+export function useDeleteUserMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: UserDeletePayload) => del<ApiEnvelope<{ message: string }>>('/users', payload),
+    onSuccess: (response) => {
+      toast.success(response.message ?? 'Usuário excluído com sucesso')
+      invalidateUserManagementQueries(queryClient)
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      toast.error(error.response?.data?.message ?? 'Falha ao excluir usuário')
+    },
   })
 }
 

@@ -30,6 +30,32 @@ class SmartCache
     
     // Histórico de performance por chave (aprendizado)
     private static $performance_history = [];
+
+    /**
+     * Prefixa chave com tenant quando houver contexto ativo.
+     * Mantem compatibilidade: chaves globais permanecem sem prefixo.
+     */
+    private static function keyWithTenant(string $key): string
+    {
+        $companyId = null;
+
+        if (class_exists('Auth') && method_exists('Auth', 'activeCompanyId')) {
+            $activeCompanyId = Auth::activeCompanyId();
+            if ($activeCompanyId !== null && (int)$activeCompanyId > 0) {
+                $companyId = (int)$activeCompanyId;
+            }
+        }
+
+        if ($companyId === null && !empty($_SESSION['active_company_id'])) {
+            $companyId = (int)$_SESSION['active_company_id'];
+        }
+
+        if ($companyId === null || $companyId < 1) {
+            return $key;
+        }
+
+        return "tenant:{$companyId}:{$key}";
+    }
     
     /**
      * Inicializar SmartCache
@@ -85,6 +111,7 @@ class SmartCache
     {
         self::init();
         self::$stats['queries_total']++;
+        $tenantKey = self::keyWithTenant($key);
         
         // Se Redis não disponível, executar direto
         if (!self::$enabled) {
@@ -92,7 +119,7 @@ class SmartCache
         }
         
         // Verificar se essa query costuma ser lenta (aprendizado)
-        $shouldCache = self::shouldUseCache($key);
+        $shouldCache = self::shouldUseCache($tenantKey);
         
         // Se histórico indica que é rápida, fazer bypass do cache
         if (!$shouldCache) {
@@ -102,14 +129,14 @@ class SmartCache
         
         // Tentar pegar do cache
         try {
-            $cached = self::$redis->get($key);
-            
+            $cached = self::$redis->get($tenantKey);
+
             if ($cached !== false) {
                 // Cache HIT
                 self::$stats['cache_hits']++;
                 
                 // Registrar que cache foi útil
-                self::recordCacheHit($key);
+                self::recordCacheHit($tenantKey);
                 
                 return unserialize($cached);
             }
@@ -126,14 +153,14 @@ class SmartCache
         $executionTime = (microtime(true) - $startTime) * 1000; // em ms
         
         // Registrar performance
-        self::recordQueryPerformance($key, $executionTime);
+        self::recordQueryPerformance($tenantKey, $executionTime);
         
         // Se query foi lenta, salvar no cache
         if ($executionTime > self::$threshold) {
             self::$stats['slow_queries_detected']++;
             
             try {
-                self::$redis->setex($key, $ttl, serialize($result));
+                self::$redis->setex($tenantKey, $ttl, serialize($result));
                 
                 // Calcular tempo economizado em futuras requisições
                 self::$stats['total_time_saved_ms'] += $executionTime;
@@ -276,7 +303,8 @@ class SmartCache
         }
         
         try {
-            self::$redis->del($key);
+            $tenantKey = self::keyWithTenant($key);
+            self::$redis->del($tenantKey);
         } catch (Exception $e) {
             error_log('[SmartCache] Error deleting cache: ' . $e->getMessage());
         }
@@ -297,7 +325,8 @@ class SmartCache
         }
         
         try {
-            $cached = self::$redis->get($key);
+            $tenantKey = self::keyWithTenant($key);
+            $cached = self::$redis->get($tenantKey);
             if ($cached !== false) {
                 return unserialize($cached);
             }
@@ -324,15 +353,44 @@ class SmartCache
         }
         
         try {
-            self::$redis->setex($key, $ttl, serialize($value));
+            $tenantKey = self::keyWithTenant($key);
+            self::$redis->setex($tenantKey, $ttl, serialize($value));
         } catch (Exception $e) {
             error_log('[SmartCache] Error writing cache: ' . $e->getMessage());
         }
     }
     
     /**
+     * Incremento atômico de contador (Redis INCR).
+     * Retorna o valor após o incremento. Retorna 0 quando Redis não está disponível.
+     *
+     * @param string $key Chave do contador
+     * @param int    $ttl TTL em segundos (aplicado apenas na criação do contador)
+     */
+    public static function atomicIncrement(string $key, int $ttl = 600): int
+    {
+        self::init();
+
+        if (!self::$enabled) {
+            return 0;
+        }
+
+        try {
+            $tenantKey = self::keyWithTenant($key);
+            $value = (int)self::$redis->incr($tenantKey);
+            if ($value === 1) {
+                self::$redis->expire($tenantKey, $ttl);
+            }
+            return $value;
+        } catch (Exception $e) {
+            error_log('[SmartCache] Error incrementing key: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
      * Invalidar cache por padrão (ex: "products:*")
-     * 
+     *
      * @param string $pattern Padrão de chaves
      */
     public static function forgetByPattern(string $pattern): void
@@ -342,10 +400,12 @@ class SmartCache
         }
         
         try {
-            $keys = self::$redis->keys($pattern);
+            $tenantPattern = self::keyWithTenant($pattern);
+            $keys = self::$redis->keys($tenantPattern);
             if (!empty($keys)) {
                 self::$redis->del($keys);
             }
+
         } catch (Exception $e) {
             error_log('[SmartCache] Error deleting cache by pattern: ' . $e->getMessage());
         }

@@ -41,25 +41,47 @@ class CrossSellGroupController extends Controller
     {
         [$u, $company] = $this->guard($params['slug']);
         $companyId = (int)$company['id'];
-        
+        $slug = (string)$company['slug'];
+
         $groups = CrossSellGroup::getByCompany($companyId);
         $categories = Category::allByCompany($companyId);
-        
-        // Enriquecer grupos com nomes das categorias recomendadas
         $categoriesMap = array_column($categories, 'name', 'id');
-        
-        foreach ($groups as &$group) {
-            foreach ($group['recommendations'] as &$rec) {
-                $rec['category_name'] = $categoriesMap[$rec['category_id']] ?? 'Categoria';
-            }
-        }
-        
-        return $this->view('admin/cross-sell-groups/index', [
-            'company' => $company,
-            'u' => $u,
-            'groups' => $groups,
-            'categories' => $categories
-        ]);
+
+        $success = isset($_GET['success']) ? (string)$_GET['success'] : null;
+        $error = isset($_GET['error']) ? (string)$_GET['error'] : null;
+
+        $payload = [
+            'groups' => array_map(static function (array $g) use ($categoriesMap): array {
+                $recs = is_array($g['recommendations'] ?? null) ? $g['recommendations'] : [];
+                return [
+                    'id' => (int)$g['id'],
+                    'trigger_category_id' => (int)$g['trigger_category_id'],
+                    'trigger_category_name' => (string)($g['trigger_category_name'] ?? ''),
+                    'active' => (int)($g['active'] ?? 0) === 1,
+                    'recommendations' => array_map(static function ($r) use ($categoriesMap): array {
+                        $cid = (int)($r['category_id'] ?? 0);
+                        return [
+                            'category_id' => $cid,
+                            'category_name' => (string)($categoriesMap[$cid] ?? 'Categoria'),
+                            'section_title' => (string)($r['section_title'] ?? ''),
+                        ];
+                    }, $recs),
+                    'updated_at' => (string)($g['updated_at'] ?? ''),
+                ];
+            }, $groups),
+            'categories' => array_map(static function (array $c): array {
+                return ['id' => (int)$c['id'], 'name' => (string)($c['name'] ?? '')];
+            }, $categories),
+            'flash' => ['error' => $error, 'success' => $success],
+            'urls' => [
+                'submit' => '/admin/' . rawurlencode($slug) . '/cross-sell-groups/save',
+                'edit_base' => '/admin/' . rawurlencode($slug) . '/cross-sell-groups/edit/',
+                'toggle_base' => '/admin/' . rawurlencode($slug) . '/cross-sell-groups/toggle/',
+                'destroy_base' => '/admin/' . rawurlencode($slug) . '/cross-sell-groups/delete/',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_CROSS_SELL__', $payload);
     }
 
     /**

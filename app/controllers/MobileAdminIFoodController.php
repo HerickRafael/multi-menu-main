@@ -60,8 +60,9 @@ class MobileAdminIFoodController extends Controller
         if ($config && !empty($config['access_token'])) {
             try {
                 $merchants = $ifoodService->getMerchants();
-                if (!empty($config['merchant_id'])) {
-                    $merchantStatus = $ifoodService->getMerchantStatus($config['merchant_id']);
+                $activeMerchantId = $ifoodService->getActiveMerchantId();
+                if ($activeMerchantId !== '') {
+                    $merchantStatus = $ifoodService->getMerchantStatus($activeMerchantId);
                 }
             } catch (\Exception $e) {
                 // Ignore
@@ -184,8 +185,8 @@ class MobileAdminIFoodController extends Controller
             return;
         }
 
-        $result = $ifoodService->confirmOrder($order['ifood_order_id']);
-        $this->jsonResponse($result);
+        $ok = $ifoodService->confirmOrder($order['ifood_order_id']);
+        $this->jsonResponse(['success' => $ok, 'message' => $ok ? 'Pedido confirmado.' : 'Falha ao confirmar pedido no iFood.']);
     }
 
     /**
@@ -205,8 +206,8 @@ class MobileAdminIFoodController extends Controller
             return;
         }
 
-        $result = $ifoodService->markAsReady($order['ifood_order_id']);
-        $this->jsonResponse($result);
+        $ok = $ifoodService->readyToPickup($order['ifood_order_id']);
+        $this->jsonResponse(['success' => $ok, 'message' => $ok ? 'Pedido marcado como pronto.' : 'Falha ao marcar pedido como pronto.']);
     }
 
     /**
@@ -226,8 +227,8 @@ class MobileAdminIFoodController extends Controller
             return;
         }
 
-        $result = $ifoodService->dispatchOrder($order['ifood_order_id']);
-        $this->jsonResponse($result);
+        $ok = $ifoodService->dispatchOrder($order['ifood_order_id']);
+        $this->jsonResponse(['success' => $ok, 'message' => $ok ? 'Pedido despachado.' : 'Falha ao despachar pedido no iFood.']);
     }
 
     /**
@@ -284,8 +285,14 @@ class MobileAdminIFoodController extends Controller
         $db = db();
 
         $ifoodService = new IFoodService($db, (int)$company['id']);
-        $events = $ifoodService->pollEvents();
-        $this->jsonResponse(['success' => true, 'events' => count($events), 'data' => $events]);
+        $result = $ifoodService->pollEvents();
+        $this->jsonResponse([
+            'success' => (bool)($result['success'] ?? false),
+            'count'   => (int)($result['total_events'] ?? 0),
+            'message' => ($result['success'] ?? false)
+                ? 'Sincronização concluída: ' . ($result['processed'] ?? 0) . ' evento(s) processado(s).'
+                : ($result['error'] ?? 'Falha ao buscar pedidos.'),
+        ]);
     }
 
     /**
@@ -367,8 +374,8 @@ class MobileAdminIFoodController extends Controller
 
         if ($status['has_token'] && $status['merchant_id']) {
             try {
-                $merchantStatus = $ifoodService->getMerchantStatus($config['merchant_id']);
-                $status['merchant_status'] = $merchantStatus;
+                $merchantStatus = $ifoodService->getMerchantStatus($ifoodService->getActiveMerchantId());
+                $status['merchant_status'] = $merchantStatus !== null ? self::parseMerchantStatus($merchantStatus) : null;
             } catch (\Exception $e) {
                 $status['merchant_status'] = null;
                 $status['error'] = $e->getMessage();
@@ -376,6 +383,38 @@ class MobileAdminIFoodController extends Controller
         }
 
         $this->jsonResponse($status);
+    }
+
+    /**
+     * Normaliza a resposta do endpoint /merchant/v1.0/merchants/{id}/status.
+     * O iFood retorna um array de objetos de canal, cada um com `available` e
+     * `message.title`. Suporta também o formato de objeto plano como fallback.
+     *
+     * @param array<mixed> $raw
+     * @return array{status: string, is_open: bool}
+     */
+    private static function parseMerchantStatus(array $raw): array
+    {
+        $isOpen = false;
+        $statusTitle = '';
+
+        if (isset($raw[0]) && is_array($raw[0])) {
+            foreach ($raw as $channel) {
+                if (!empty($channel['available'])) {
+                    $isOpen = true;
+                    $statusTitle = (string)($channel['message']['title'] ?? 'Online');
+                    break;
+                }
+            }
+            if (!$isOpen && !empty($raw[0]['message']['title'])) {
+                $statusTitle = (string)$raw[0]['message']['title'];
+            }
+        } else {
+            $isOpen = (bool)($raw['available'] ?? $raw['is_open'] ?? false);
+            $statusTitle = (string)($raw['message']['title'] ?? $raw['status'] ?? '');
+        }
+
+        return ['status' => $statusTitle, 'is_open' => $isOpen];
     }
 
     private function jsonResponse(array $data): void

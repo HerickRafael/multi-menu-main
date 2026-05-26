@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../modules/auth/MobileAdminGuard.php';
 
 /**
  * Controller Mobile para Gestão de Cupons
@@ -11,27 +12,8 @@ class MobileAdminCouponsController extends Controller
 {
     private function guard(): array
     {
-        Auth::start();
-        $user = Auth::user();
         $slug = $_SERVER['MOBILE_SLUG'] ?? 'wollburger';
-
-        if (!$user) {
-            header('Location: /login');
-            exit;
-        }
-
-        $company = Company::findBySlug($slug);
-        if (!$company) {
-            http_response_code(404);
-            echo 'Empresa não encontrada';
-            exit;
-        }
-
-        if ($user['role'] !== 'root' && (int)$user['company_id'] !== (int)$company['id']) {
-            http_response_code(403);
-            echo 'Acesso negado';
-            exit;
-        }
+        [$user, $company] = MobileAdminGuard::requireCompanyAccess('coupons.manage');
 
         return [$user, $company, $slug];
     }

@@ -12,21 +12,50 @@ class QueueJob
         ?int $companyId = null,
         int $priority = 5,
         int $maxAttempts = 5,
-        ?string $availableAt = null
+        ?string $availableAt = null,
+        ?string $dedupKey = null
     ): bool {
         $sql = 'INSERT INTO queue_jobs
-                (company_id, job_type, payload_json, status, priority, max_attempts, available_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)';
+                (company_id, job_type, dedup_key, payload_json, status, priority, max_attempts, available_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
         $st = db()->prepare($sql);
         return $st->execute([
             $companyId,
             $jobType,
+            $dedupKey,
             $payload ? json_encode($payload, JSON_UNESCAPED_UNICODE) : null,
             'pending',
             $priority,
             $maxAttempts,
             $availableAt ?? date('Y-m-d H:i:s'),
         ]);
+    }
+
+    /**
+     * Enfileira coalescendo por dedup_key: se já existir job pending/retrying
+     * com o mesmo dedup_key, retorna false sem inserir (o job existente vai
+     * pegar o estado atualizado quando rodar).
+     */
+    public static function enqueueCoalesced(
+        string $jobType,
+        string $dedupKey,
+        ?array $payload,
+        ?int $companyId = null,
+        int $priority = 5,
+        int $maxAttempts = 5,
+        ?string $availableAt = null
+    ): bool {
+        $existing = db()->prepare(
+            'SELECT id FROM queue_jobs
+              WHERE dedup_key = ? AND status IN (\'pending\', \'retrying\')
+              LIMIT 1'
+        );
+        $existing->execute([$dedupKey]);
+        if ($existing->fetchColumn() !== false) {
+            return false; // coalesced
+        }
+
+        return self::enqueue($jobType, $payload, $companyId, $priority, $maxAttempts, $availableAt, $dedupKey);
     }
 
     public static function search(array $filters, int $limit = 50, int $offset = 0): array

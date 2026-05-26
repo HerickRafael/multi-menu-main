@@ -136,17 +136,40 @@ window.handleLoginSubmit = function(event) {
       return;
     }
     if (result.data.ok) {
+      if (result.data.otp_required) {
+        if (otpWrapper) {
+          otpWrapper.classList.remove('hidden');
+        }
+        if (otpStatus) {
+          otpStatus.textContent = result.data.message || 'Digite o código enviado para o seu WhatsApp.';
+        }
+        if (loginMsg) {
+          loginMsg.textContent = result.data.message || 'Código enviado para o WhatsApp.';
+          loginMsg.classList.remove('hidden', 'text-red-600');
+          loginMsg.classList.add('text-green-600');
+        }
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Confirmar código';
+        }
+        if (otpInput) {
+          otpInput.focus();
+        }
+        return;
+      }
+
       console.log('✅ Login bem-sucedido, redirecionando para:', result.data.redirect);
       window.location.href = result.data.redirect || window.location.href;
     } else {
       console.log('❌ Erro no login:', result.data.message);
       if (loginMsg) {
         loginMsg.textContent = result.data.message || 'Erro ao fazer login. Tente novamente.';
-        loginMsg.classList.remove('hidden');
+        loginMsg.classList.remove('hidden', 'text-green-600');
+        loginMsg.classList.add('text-red-600');
       }
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Entrar';
+        submitBtn.textContent = otpWrapper && !otpWrapper.classList.contains('hidden') ? 'Confirmar código' : 'Entrar';
       }
     }
   })
@@ -161,11 +184,12 @@ window.handleLoginSubmit = function(event) {
         errorMessage = 'Erro no servidor. Tente novamente.';
       }
       loginMsg.textContent = errorMessage;
-      loginMsg.classList.remove('hidden');
+        loginMsg.classList.remove('hidden', 'text-green-600');
+        loginMsg.classList.add('text-red-600');
     }
     if (submitBtn) {
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Entrar';
+        submitBtn.textContent = otpWrapper && !otpWrapper.classList.contains('hidden') ? 'Confirmar código' : 'Entrar';
     }
   });
   
@@ -196,6 +220,11 @@ console.log('✅ window.handleLoginSubmit definida (login_modal.php)');
       <div class="mb-4">
         <label class="block text-sm font-medium mb-1">Nome</label>
         <input type="text" id="login-name" name="name" required class="w-full border rounded-lg px-3 py-2" />
+      </div>
+      <div id="login-otp-wrapper" class="mb-4 hidden">
+        <label class="block text-sm font-medium mb-1">Código de acesso</label>
+        <input type="text" id="login-otp" name="otp" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" class="w-full border rounded-lg px-3 py-2 tracking-[0.25em] text-center" />
+        <p id="login-otp-status" class="text-xs text-gray-500 mt-1">Digite o código enviado para o seu WhatsApp.</p>
       </div>
       <div id="lgpd-consent-wrapper" class="mb-4">
         <label class="flex items-start gap-2 text-xs text-gray-500 cursor-pointer">
@@ -259,6 +288,9 @@ console.log('✅ window.handleLoginSubmit definida (login_modal.php)');
     // Inicializar máscara de telefone
     const phoneInput = document.getElementById('login-whatsapp');
     const nameInput = document.getElementById('login-name');
+    const otpWrapper = document.getElementById('login-otp-wrapper');
+    const otpInput = document.getElementById('login-otp');
+    const otpStatus = document.getElementById('login-otp-status');
     const statusEl = document.getElementById('login-whatsapp-status');
     
     // Variável para controlar debounce da busca

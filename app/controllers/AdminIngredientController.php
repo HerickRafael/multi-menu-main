@@ -109,37 +109,88 @@ class AdminIngredientController extends Controller
     {
         [$u, $company] = $this->guard($params['slug']);
         $companyId = (int)$company['id'];
+        $slug = (string)$company['slug'];
 
         $productId = isset($_GET['product_id']) && $_GET['product_id'] !== '' ? (int)$_GET['product_id'] : null;
         $q = isset($_GET['q']) ? trim($_GET['q']) : null;
 
         $items = Ingredient::listByCompany($companyId, $productId, $q !== '' ? $q : null);
         $products = Product::allForCompany($companyId);
-        $error = $this->consumeFlash('flash_error');
+        $flashError = $this->consumeFlash('flash_error');
+        $flashSuccess = $this->consumeFlash('flash_success');
 
-        return $this->view('admin/ingredients/index', compact('company', 'items', 'products', 'error', 'productId', 'q'));
+        $payload = [
+            'ingredients' => array_map(static function (array $row): array {
+                $cost = isset($row['cost']) ? (float)$row['cost'] : null;
+                $salePrice = isset($row['sale_price']) ? (float)$row['sale_price'] : null;
+                $unitValue = isset($row['unit_value']) ? (float)$row['unit_value'] : null;
+                return [
+                    'id' => (int)$row['id'],
+                    'name' => (string)($row['name'] ?? ''),
+                    'internal_name' => (string)($row['internal_name'] ?? ''),
+                    'cost' => $cost,
+                    'sale_price' => $salePrice,
+                    'unit' => (string)($row['unit'] ?? ''),
+                    'unit_value' => $unitValue,
+                    'image_path' => (string)($row['image_path'] ?? ''),
+                    'active' => (int)($row['active'] ?? 0) === 1,
+                ];
+            }, $items),
+            'products' => array_map(static function (array $row): array {
+                return [
+                    'id' => (int)$row['id'],
+                    'name' => (string)($row['name'] ?? ''),
+                ];
+            }, $products),
+            'filters' => [
+                'product_id' => $productId,
+                'q' => $q,
+            ],
+            'flash' => [
+                'error' => $flashError,
+                'success' => $flashSuccess,
+            ],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/ingredients',
+                'create' => '/admin/' . rawurlencode($slug) . '/ingredients/create',
+                'edit_base' => '/admin/' . rawurlencode($slug) . '/ingredients/',
+                'destroy_base' => '/admin/' . rawurlencode($slug) . '/ingredients/',
+                'toggle_base' => '/admin/' . rawurlencode($slug) . '/ingredients/',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_INGREDIENTS__', $payload);
     }
 
     public function create($params)
     {
         [$u, $company] = $this->guard($params['slug']);
-        $companyId = (int)$company['id'];
+        $slug = (string)$company['slug'];
 
         $error = $this->consumeFlash('flash_error');
         $old = $this->consumeFlash('flash_old_ingredient');
 
         $ingredient = [
-          'id' => null,
-          'name' => $old['name'] ?? '',
-          'internal_name' => $old['internal_name'] ?? '',
-          'cost' => $old['cost'] ?? '',
-          'sale_price' => $old['sale_price'] ?? '',
-          'unit' => $old['unit'] ?? '',
-          'unit_value' => $old['unit_value'] ?? '',
-          'image_path' => null,
+            'id' => null,
+            'name' => (string)($old['name'] ?? ''),
+            'internal_name' => (string)($old['internal_name'] ?? ''),
+            'cost' => $old['cost'] ?? '',
+            'sale_price' => $old['sale_price'] ?? '',
+            'unit' => (string)($old['unit'] ?? ''),
+            'unit_value' => $old['unit_value'] ?? '',
+            'image_path' => '',
         ];
 
-        return $this->view('admin/ingredients/form', compact('company', 'ingredient', 'error'));
+        $payload = [
+            'ingredient' => $ingredient,
+            'flash' => ['error' => $error],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/ingredients',
+                'submit' => '/admin/' . rawurlencode($slug) . '/ingredients',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_INGREDIENT_FORM__', $payload);
     }
 
     public function store($params)
@@ -287,11 +338,13 @@ class AdminIngredientController extends Controller
     {
         [$u, $company] = $this->guard($params['slug']);
         $companyId = (int)$company['id'];
+        $slug = (string)$company['slug'];
+        $ingredientId = (int)$params['id'];
 
-        $ingredient = Ingredient::findForCompany($companyId, (int)$params['id']);
+        $ingredient = Ingredient::findForCompany($companyId, $ingredientId);
 
         if (!$ingredient) {
-            echo 'Ingrediente não encontrado.';
+            header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/ingredients'));
             exit;
         }
 
@@ -307,7 +360,28 @@ class AdminIngredientController extends Controller
             $ingredient['unit_value'] = $old['unit_value'];
         }
 
-        return $this->view('admin/ingredients/form', compact('company', 'ingredient', 'error'));
+        $payload = [
+            'ingredient' => [
+                'id' => (int)$ingredient['id'],
+                'name' => (string)($ingredient['name'] ?? ''),
+                'internal_name' => (string)($ingredient['internal_name'] ?? ''),
+                'cost' => $ingredient['cost'] ?? '',
+                'sale_price' => $ingredient['sale_price'] ?? '',
+                'unit' => (string)($ingredient['unit'] ?? ''),
+                'unit_value' => $ingredient['unit_value'] ?? '',
+                'image_path' => (string)($ingredient['image_path'] ?? ''),
+                'active' => (int)($ingredient['active'] ?? 0) === 1,
+            ],
+            'flash' => ['error' => $error],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/ingredients',
+                'submit' => '/admin/' . rawurlencode($slug) . '/ingredients/' . $ingredientId,
+                'destroy' => '/admin/' . rawurlencode($slug) . '/ingredients/' . $ingredientId . '/del',
+                'toggle' => '/admin/' . rawurlencode($slug) . '/ingredients/' . $ingredientId . '/toggle',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_INGREDIENT_FORM__', $payload);
     }
 
     public function update($params)

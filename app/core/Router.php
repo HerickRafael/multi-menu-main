@@ -34,7 +34,7 @@ class RouteDefinition
 
 class Router
 {
-    private array $routes = ['GET' => [], 'POST' => [], 'HEAD' => []];
+    private array $routes = ['GET' => [], 'POST' => [], 'HEAD' => [], 'DELETE' => []];
     private static ?string $currentRouteName = null;
     private static ?string $currentRoutePattern = null;
     private static ?string $currentRouteNameSource = null;
@@ -98,6 +98,19 @@ class Router
         ];
 
         return new RouteDefinition('POST', $pattern, $handler, $name, false);
+    }
+
+    public function delete(string $pattern, $handler)
+    {
+        $name = $this->buildDefaultRouteName('DELETE', $pattern);
+        $this->routes['DELETE'][$pattern] = [
+            'handler' => $handler,
+            'name' => $name,
+            'pattern' => $pattern,
+            'explicit_name' => false,
+        ];
+
+        return new RouteDefinition('DELETE', $pattern, $handler, $name, false);
     }
 
     private function setRouteName(string $method, string $pattern, string $routeName, bool $explicitName): void

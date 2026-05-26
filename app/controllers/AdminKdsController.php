@@ -75,13 +75,36 @@ class AdminKdsController extends Controller
             'refreshMs'      => (int)(config('kds_refresh_ms') ?? 1500),
         ];
 
-        return $this->view('admin/kds/index', [
-            'company'         => $company,
-            'activeSlug'      => $company['slug'],
-            'initialSnapshot' => $snapshot,
-            'kdsConfig'       => $config,
-            'hasCanceled'     => $hasCanceled,
-        ]);
+        $payload = [
+            'initial_snapshot' => array_map(static function (array $o): array {
+                return [
+                    'id' => (int)$o['id'],
+                    'order_number' => isset($o['order_number']) ? (int)$o['order_number'] : null,
+                    'customer_name' => (string)($o['customer_name'] ?? ''),
+                    'customer_phone' => (string)($o['customer_phone'] ?? ''),
+                    'status' => (string)($o['status'] ?? ''),
+                    'total' => isset($o['total']) ? (float)$o['total'] : 0,
+                    'items_count' => isset($o['items_count']) ? (int)$o['items_count'] : null,
+                    'created_at' => (string)($o['created_at'] ?? ''),
+                    'sla_deadline' => $o['sla_deadline'] ?? null,
+                    'source' => (string)($o['source'] ?? ''),
+                    'items' => $o['items'] ?? [],
+                ];
+            }, $snapshot),
+            'has_canceled' => $hasCanceled,
+            'config' => $config,
+            'columns' => $config['columns'],
+            'refresh_ms' => (int)$config['refreshMs'],
+            'sla_minutes' => (int)$config['slaMinutes'],
+            'urls' => [
+                'data' => $config['dataUrl'],
+                'status' => $config['statusUrl'],
+                'order_detail_base' => $config['orderDetailBase'],
+                'bell' => $config['bellUrl'],
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_KDS__', $payload);
     }
 
     public function data($params)

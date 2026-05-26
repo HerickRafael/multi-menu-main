@@ -169,7 +169,7 @@ multi-menu/
 | [docs/IFOOD-INTEGRATION.md](docs/IFOOD-INTEGRATION.md) | Integração iFood (polling + webhook) |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Guia de deploy (Docker Compose e Swarm) |
 | [docs/API.md](docs/API.md) | Documentação da API REST |
-| [docs/REGRESSION-REPORT.md](docs/REGRESSION-REPORT.md) | Relatório de testes de regressão |
+| [docs/START_COMMANDS.md](docs/START_COMMANDS.md) | Comandos de inicialização do projeto |
 
 ## 🔐 Segurança
 

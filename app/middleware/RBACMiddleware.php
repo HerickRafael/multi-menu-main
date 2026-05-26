@@ -8,19 +8,10 @@ class RBACMiddleware
 {
     public static function enforce(string $permissionKey): void
     {
-        $userId = (int)($_SESSION['super_admin_id'] ?? 0);
-        if ($userId < 1) {
-            http_response_code(401);
-            exit('Nao autenticado.');
-        }
+        Auth::start();
+        Auth::requireSuperAdmin(true);
 
-        // Root sempre tem acesso total por compatibilidade operacional.
-        $role = (string)($_SESSION['super_admin_role'] ?? 'root');
-        if ($role === 'root') {
-            return;
-        }
-
-        if (!Permission::userHasPermission($userId, $permissionKey)) {
+        if (!Auth::superAdminHasPermission($permissionKey)) {
             http_response_code(403);
             exit('Acesso negado.');
         }

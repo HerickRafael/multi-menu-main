@@ -1,1 +1,0 @@
-import{j as t}from"./query-DjjC4fQ_.js";import{P as s}from"./PlaceholderPage-BrHG8CSr.js";import{M as r}from"./index-Bg4pdAdB.js";import"./badge-DKt1z22D.js";import"./vendor-BUsQobiH.js";import"./charts-of54e9GM.js";import"./ui-Cpa28Zd-.js";function u(){return t.jsx(s,{title:"WhatsApp",description:"Status das instâncias e sessões",plan:"PLANO 4",icon:r})}export{u as default};

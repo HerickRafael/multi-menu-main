@@ -32,12 +32,17 @@ Options -Indexes
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
-  # SPA fallback: /superadmin/* não-arquivo -> React index.html
+  # SPA fallback: /superadmin/* não-arquivo -> React index.html (serve do filesystem direto)
   RewriteCond %{REQUEST_URI} ^/superadmin
   RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteRule ^ /superadmin/index.html [L]
+  RewriteCond %{REQUEST_FILENAME} !-d
+  # Serve the actual file if it's the compiled SPA path
+  RewriteRule ^superadmin/(index\.html)?$ /superadmin/index.html [L]
+  # For all other /superadmin/* paths that aren't files or directories, serve the SPA index
+  RewriteRule ^superadmin/.*$ /superadmin/index.html [L]
 
-  # Roteia para index.php (PHP app)
+  # Roteia para index.php (PHP app) - but NOT for superadmin SPA
+  RewriteCond %{REQUEST_URI} !^/superadmin
   RewriteRule ^ index.php [L]
 </IfModule>
 

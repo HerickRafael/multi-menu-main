@@ -9,7 +9,7 @@ class Order
     /**
      * Lista pedidos com contagem de itens
      */
-    public static function listByCompany(PDO $db, int $companyId, ?string $status = null, int $limit = 50, int $offset = 0, ?string $search = null, ?string $source = null): array
+    public static function listByCompany(PDO $db, int $companyId, ?string $status = null, int $limit = 50, int $offset = 0, ?string $search = null, ?string $source = null, ?string $excludeSource = null): array
     {
         $sql = 'SELECT o.*, 
                        (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) as items_count,
@@ -25,8 +25,11 @@ class Order
         
         // Filtro por origem (manual, website, ifood)
         if ($source) {
-            $sql .= ' AND o.source = :source';
-            $args[':source'] = $source;
+            $sql .= ' AND LOWER(TRIM(o.source)) = :source';
+            $args[':source'] = strtolower(trim($source));
+        } elseif ($excludeSource) {
+            $sql .= ' AND (o.source IS NULL OR LOWER(TRIM(o.source)) != :exclude_source)';
+            $args[':exclude_source'] = strtolower(trim($excludeSource));
         }
         
         // Busca por texto (nome, telefone, ID)
@@ -75,7 +78,7 @@ class Order
     /**
      * Conta total de pedidos para paginação
      */
-    public static function countByCompany(PDO $db, int $companyId, ?string $status = null, ?string $search = null, ?string $source = null): int
+    public static function countByCompany(PDO $db, int $companyId, ?string $status = null, ?string $search = null, ?string $source = null, ?string $excludeSource = null): int
     {
         $sql = 'SELECT COUNT(*) FROM orders WHERE company_id = :cid';
         $args = [':cid' => $companyId];
@@ -87,8 +90,11 @@ class Order
         
         // Filtro por origem (manual, website, ifood)
         if ($source) {
-            $sql .= ' AND source = :source';
-            $args[':source'] = $source;
+            $sql .= ' AND LOWER(TRIM(source)) = :source';
+            $args[':source'] = strtolower(trim($source));
+        } elseif ($excludeSource) {
+            $sql .= ' AND (source IS NULL OR LOWER(TRIM(source)) != :exclude_source)';
+            $args[':exclude_source'] = strtolower(trim($excludeSource));
         }
         
         // Busca por texto (nome, telefone, ID)

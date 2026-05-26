@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../middleware/SuperAdminMiddleware.php';
+require_once __DIR__ . '/../middleware/PermissionMiddleware.php';
 require_once __DIR__ . '/../services/SmartCache.php';
 
 class SuperAdminController extends Controller
@@ -257,22 +258,22 @@ class SuperAdminController extends Controller
     {
         SuperAdminMiddleware::enforce();
 
-        $page = max(1, (int)($_GET['page'] ?? 1));
-        $per = 20;
-        $offset = ($page - 1) * $per;
-        $search = trim((string)($_GET['q'] ?? ''));
+        // Render the React SPA instead of PHP view
+        $this->view('super-admin/spa', [
+            'title' => 'Super Admin - Dashboard',
+            'superAdminName' => $_SESSION['super_admin_name'] ?? 'Admin',
+        ]);
+        return;
 
-        $pdo = $this->db();
-
-        $statsRow = $pdo->query(
-            'SELECT COUNT(*) AS total,
-                    SUM(active = 1) AS active_cnt,
-                    SUM(active = 0) AS inactive_cnt
-             FROM companies'
-        )->fetch(PDO::FETCH_ASSOC);
-        $statsTotal = (int)($statsRow['total'] ?? 0);
-        $statsActive = (int)($statsRow['active_cnt'] ?? 0);
-        $statsInactive = (int)($statsRow['inactive_cnt'] ?? 0);
+        // JOIN-based approach: eliminates N+1 correlated subqueries
+        $aggregateJoin = '
+            LEFT JOIN (
+                SELECT company_id, MIN(id) AS min_id FROM users GROUP BY company_id
+            ) u_min ON u_min.company_id = c.id
+            LEFT JOIN users u_first ON u_first.id = u_min.min_id
+            LEFT JOIN (
+                SELECT company_id, COUNT(*) AS order_count FROM orders GROUP BY company_id
+            ) oc ON oc.company_id = c.id';
 
         if ($search !== '') {
             $like = '%' . $search . '%';
@@ -281,10 +282,8 @@ class SuperAdminController extends Controller
             $cnt = (int)$stCnt->fetchColumn();
 
             $stRows = $pdo->prepare(
-                'SELECT c.*,
-                    (SELECT u.email FROM users u WHERE u.company_id = c.id ORDER BY u.id ASC LIMIT 1) AS admin_email,
-                    (SELECT COUNT(*) FROM orders o WHERE o.company_id = c.id) AS order_count
-                 FROM companies c
+                'SELECT c.*, u_first.email AS admin_email, COALESCE(oc.order_count, 0) AS order_count
+                 FROM companies c' . $aggregateJoin . '
                  WHERE c.name LIKE ? OR c.slug LIKE ?
                  ORDER BY c.id DESC
                  LIMIT ' . (int)$per . ' OFFSET ' . (int)$offset
@@ -293,14 +292,14 @@ class SuperAdminController extends Controller
             $rows = $stRows->fetchAll(PDO::FETCH_ASSOC);
         } else {
             $cnt = (int)$pdo->query('SELECT COUNT(*) FROM companies')->fetchColumn();
-            $rows = $pdo->query(
-                'SELECT c.*,
-                    (SELECT u.email FROM users u WHERE u.company_id = c.id ORDER BY u.id ASC LIMIT 1) AS admin_email,
-                    (SELECT COUNT(*) FROM orders o WHERE o.company_id = c.id) AS order_count
-                 FROM companies c
+            $stRows = $pdo->prepare(
+                'SELECT c.*, u_first.email AS admin_email, COALESCE(oc.order_count, 0) AS order_count
+                 FROM companies c' . $aggregateJoin . '
                  ORDER BY c.id DESC
                  LIMIT ' . (int)$per . ' OFFSET ' . (int)$offset
-            )->fetchAll(PDO::FETCH_ASSOC);
+            );
+            $stRows->execute([]);
+            $rows = $stRows->fetchAll(PDO::FETCH_ASSOC);
         }
 
         $flash = $_SESSION[self::FLASH_KEY] ?? null;
@@ -1381,6 +1380,7 @@ class SuperAdminController extends Controller
     public function observabilityDashboard(array $params = []): void
     {
         SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('observability.read');
 
         require_once __DIR__ . '/../services/ObservabilityService.php';
 
@@ -1392,6 +1392,7 @@ class SuperAdminController extends Controller
     public function observabilityRunChecks(): void
     {
         SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('observability.run_checks');
 
         require_once __DIR__ . '/../services/ObservabilityService.php';
 
@@ -1414,6 +1415,7 @@ class SuperAdminController extends Controller
     public function eventsIndex(array $params = []): void
     {
         SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('events.read');
 
         require_once __DIR__ . '/../services/EventLogService.php';
 
@@ -1445,6 +1447,7 @@ class SuperAdminController extends Controller
     public function eventsDispatchTest(): void
     {
         SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('events.dispatch');
 
         require_once __DIR__ . '/../services/EventDispatcher.php';
         require_once __DIR__ . '/../events/WhatsAppDisconnectedEvent.php';
@@ -1452,6 +1455,15 @@ class SuperAdminController extends Controller
         $companyId = (int)($_POST['company_id'] ?? 1);
         $instanceId = (int)($_POST['instance_id'] ?? 1);
         $adminId = (int)($_SESSION['super_admin_id'] ?? 0);
+
+        if ($companyId < 1 || $instanceId < 1) {
+            $this->redirectWithFlash('error', 'Parâmetros inválidos para disparo de evento.', 'superadmin/events');
+        }
+
+        $company = Company::find($companyId);
+        if (!$company) {
+            $this->redirectWithFlash('error', 'Empresa informada não foi encontrada.', 'superadmin/events');
+        }
 
         EventDispatcher::dispatch(new WhatsAppDisconnectedEvent(
             $instanceId,
@@ -1461,6 +1473,401 @@ class SuperAdminController extends Controller
         ));
 
         $this->redirectWithFlash('success', 'Evento de teste despachado com sucesso.', 'superadmin/events');
+    }
+
+    /* ========= FASE 7: Billing SaaS + Assinaturas + Faturas ========= */
+
+    /** GET /superadmin/billing */
+    public function billingIndex(array $params = []): void
+    {
+        SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('billing.read');
+
+        require_once __DIR__ . '/../models/Plan.php';
+        require_once __DIR__ . '/../models/Subscription.php';
+        require_once __DIR__ . '/../models/Invoice.php';
+        require_once __DIR__ . '/../models/UsageLimit.php';
+
+        $pdo = $this->db();
+        $companies = $pdo->query('SELECT id, name, slug, active FROM companies ORDER BY name ASC')->fetchAll(PDO::FETCH_ASSOC);
+        [$companyId, $selectedCompany] = $this->parseCompanyScope($companies);
+
+        $statusFilter = trim((string)($_GET['subscription_status'] ?? ''));
+        $selectedPlanCode = trim((string)($_GET['plan_code'] ?? ''));
+        $allowedStatuses = ['trialing', 'active', 'past_due', 'canceled', 'incomplete', 'paused'];
+        if ($statusFilter !== '' && !in_array($statusFilter, $allowedStatuses, true)) {
+            $statusFilter = '';
+        }
+
+        $plans = Plan::all(true);
+        $selectedPlan = $selectedPlanCode !== '' ? Plan::findByCode($selectedPlanCode) : null;
+
+        $subsSql = 'SELECT s.id, s.company_id, s.plan_id, s.status, s.current_period_end, s.created_at,
+                           c.name AS company_name, c.slug AS company_slug,
+                           p.name AS plan_name, p.code AS plan_code, p.price_monthly, p.currency
+                    FROM subscriptions s
+                    INNER JOIN companies c ON c.id = s.company_id
+                    INNER JOIN plans p ON p.id = s.plan_id
+                    WHERE 1=1';
+        $subsBind = [];
+
+        if ($companyId > 0) {
+            $subsSql .= ' AND s.company_id = ?';
+            $subsBind[] = $companyId;
+        }
+        if ($statusFilter !== '') {
+            $subsSql .= ' AND s.status = ?';
+            $subsBind[] = $statusFilter;
+        }
+
+        $subsSql .= ' ORDER BY s.id DESC LIMIT 80';
+        $subsStmt = $pdo->prepare($subsSql);
+        $subsStmt->execute($subsBind);
+        $subscriptions = $subsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $currentSubscription = null;
+        $invoices = [];
+        $usageLimits = [];
+        if ($companyId > 0) {
+            $currentSubscription = Subscription::currentByCompany($companyId);
+            $invoices = Invoice::listByCompany($companyId, 40);
+            $usageLimits = UsageLimit::listByCompany($companyId);
+        }
+
+        $statusRows = $pdo->query('SELECT status, COUNT(*) AS total FROM subscriptions GROUP BY status')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $statusSummary = [
+            'trialing' => 0,
+            'active' => 0,
+            'past_due' => 0,
+            'canceled' => 0,
+            'incomplete' => 0,
+            'paused' => 0,
+        ];
+        foreach ($statusRows as $row) {
+            $key = (string)($row['status'] ?? '');
+            if (array_key_exists($key, $statusSummary)) {
+                $statusSummary[$key] = (int)($row['total'] ?? 0);
+            }
+        }
+
+        $this->view('super-admin/billing', [
+            'title' => 'Billing SaaS',
+            'superAdminName' => $_SESSION['super_admin_name'] ?? '',
+            'companies' => $companies,
+            'selectedCompany' => $selectedCompany,
+            'selectedCompanyId' => $companyId,
+            'plans' => $plans,
+            'selectedPlan' => $selectedPlan,
+            'selectedPlanCode' => $selectedPlanCode,
+            'subscriptions' => $subscriptions,
+            'currentSubscription' => $currentSubscription,
+            'invoices' => $invoices,
+            'usageLimits' => $usageLimits,
+            'subscriptionStatusFilter' => $statusFilter,
+            'statusSummary' => $statusSummary,
+            'allowedStatuses' => $allowedStatuses,
+        ]);
+    }
+
+    /** POST /superadmin/billing/plans/save */
+    public function billingSavePlan(): void
+    {
+        SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('billing.manage');
+
+        require_once __DIR__ . '/../models/Plan.php';
+
+        $code = trim((string)($_POST['code'] ?? ''));
+        $name = trim((string)($_POST['name'] ?? ''));
+        $description = trim((string)($_POST['description'] ?? ''));
+        $priceMonthly = (float)($_POST['price_monthly'] ?? 0);
+        $priceYearly = (float)($_POST['price_yearly'] ?? 0);
+        $currency = strtoupper(trim((string)($_POST['currency'] ?? 'BRL')));
+        $isActive = !empty($_POST['is_active']) ? 1 : 0;
+        $limitsJsonRaw = trim((string)($_POST['limits_json'] ?? ''));
+
+        if ($code === '' || $name === '') {
+            $this->redirectWithFlash('error', 'Codigo e nome do plano sao obrigatorios.', 'superadmin/billing?plan_code=' . urlencode($code));
+        }
+
+        if (!preg_match('/^[A-Za-z0-9._-]{2,60}$/', $code)) {
+            $this->redirectWithFlash('error', 'Codigo do plano invalido.', 'superadmin/billing?plan_code=' . urlencode($code));
+        }
+
+        if (!preg_match('/^[A-Z]{3}$/', $currency)) {
+            $this->redirectWithFlash('error', 'Moeda invalida.', 'superadmin/billing?plan_code=' . urlencode($code));
+        }
+
+        $limitsJson = null;
+        if ($limitsJsonRaw !== '') {
+            $decoded = json_decode($limitsJsonRaw, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $this->redirectWithFlash('error', 'JSON de limites invalido.', 'superadmin/billing?plan_code=' . urlencode($code));
+            }
+            $limitsJson = $decoded;
+        }
+
+        Plan::upsertByCode([
+            'code' => $code,
+            'name' => $name,
+            'description' => $description !== '' ? $description : null,
+            'price_monthly' => $priceMonthly,
+            'price_yearly' => $priceYearly,
+            'currency' => $currency,
+            'limits_json' => $limitsJson,
+            'is_active' => $isActive,
+        ]);
+
+        $this->redirectWithFlash('success', 'Plano salvo com sucesso.', 'superadmin/billing?plan_code=' . urlencode($code));
+    }
+
+    /** POST /superadmin/billing/plans/{code}/toggle */
+    public function billingTogglePlanStatus(array $params = []): void
+    {
+        SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('billing.manage');
+
+        require_once __DIR__ . '/../models/Plan.php';
+
+        $code = trim((string)($params['code'] ?? ''));
+        $plan = $code !== '' ? Plan::findByCode($code) : null;
+
+        if (!$plan) {
+            $this->redirectWithFlash('error', 'Plano nao encontrado.', 'superadmin/billing');
+        }
+
+        Plan::upsertByCode([
+            'code' => (string)$plan['code'],
+            'name' => (string)$plan['name'],
+            'description' => $plan['description'] ?? null,
+            'price_monthly' => (float)($plan['price_monthly'] ?? 0),
+            'price_yearly' => (float)($plan['price_yearly'] ?? 0),
+            'currency' => (string)($plan['currency'] ?? 'BRL'),
+            'limits_json' => $plan['limits_json'] ?? null,
+            'is_active' => empty($plan['is_active']) ? 1 : 0,
+        ]);
+
+        $this->redirectWithFlash('success', 'Status do plano atualizado.', 'superadmin/billing?plan_code=' . urlencode((string)$plan['code']));
+    }
+
+    /** POST /superadmin/billing/subscriptions/create */
+    public function billingCreateSubscription(): void
+    {
+        SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('billing.manage');
+
+        require_once __DIR__ . '/../models/Plan.php';
+        require_once __DIR__ . '/../models/Subscription.php';
+        require_once __DIR__ . '/../models/UsageLimit.php';
+
+        $companyId = (int)($_POST['company_id'] ?? 0);
+        $planId = (int)($_POST['plan_id'] ?? 0);
+        $status = trim((string)($_POST['status'] ?? 'active'));
+        $trialDays = max(0, (int)($_POST['trial_days'] ?? 0));
+        $billingMonths = max(1, min(24, (int)($_POST['billing_months'] ?? 1)));
+        $adminId = (int)($_SESSION['super_admin_id'] ?? 0);
+
+        $allowedStatuses = ['trialing', 'active', 'past_due', 'canceled', 'incomplete', 'paused'];
+        if (!in_array($status, $allowedStatuses, true)) {
+            $this->redirectWithFlash('error', 'Status de assinatura invalido.', 'superadmin/billing?company_id=' . $companyId);
+        }
+
+        $company = Company::find($companyId);
+        if (!$company) {
+            $this->redirectWithFlash('error', 'Empresa invalida para assinatura.', 'superadmin/billing');
+        }
+
+        $plan = Plan::find($planId);
+        if (!$plan) {
+            $this->redirectWithFlash('error', 'Plano invalido.', 'superadmin/billing?company_id=' . $companyId);
+        }
+
+        $now = new DateTimeImmutable('now');
+        $periodStart = $now->format('Y-m-d H:i:s');
+        $periodEnd = $now->modify('+' . $billingMonths . ' month')->format('Y-m-d H:i:s');
+        $trialEndsAt = null;
+        if ($trialDays > 0) {
+            $trialEndsAt = $now->modify('+' . $trialDays . ' day')->format('Y-m-d H:i:s');
+            if ($status === 'active') {
+                $status = 'trialing';
+            }
+        }
+
+        $subscriptionId = Subscription::create([
+            'company_id' => $companyId,
+            'plan_id' => $planId,
+            'status' => $status,
+            'starts_at' => $periodStart,
+            'trial_ends_at' => $trialEndsAt,
+            'current_period_start' => $periodStart,
+            'current_period_end' => $periodEnd,
+            'metadata_json' => [
+                'source' => 'superadmin_manual',
+                'billing_months' => $billingMonths,
+                'trial_days' => $trialDays,
+            ],
+            'created_by_super_admin_id' => $adminId > 0 ? $adminId : null,
+        ]);
+
+        $limitsRaw = (string)($plan['limits_json'] ?? '');
+        if ($limitsRaw !== '') {
+            $limits = json_decode($limitsRaw, true);
+            if (is_array($limits)) {
+                foreach ($limits as $resourceKey => $resourceConfig) {
+                    $resourceKey = trim((string)$resourceKey);
+                    if ($resourceKey === '') {
+                        continue;
+                    }
+
+                    $hardLimit = 0;
+                    $softLimit = 0;
+                    $resetPeriod = 'monthly';
+                    $isBlocking = 1;
+
+                    if (is_array($resourceConfig)) {
+                        $hardLimit = (int)($resourceConfig['hard_limit'] ?? 0);
+                        $softLimit = (int)($resourceConfig['soft_limit'] ?? 0);
+                        $resetPeriod = (string)($resourceConfig['reset_period'] ?? 'monthly');
+                        $isBlocking = (int)($resourceConfig['is_blocking'] ?? 1) === 1 ? 1 : 0;
+                    } elseif (is_numeric($resourceConfig)) {
+                        $hardLimit = (int)$resourceConfig;
+                    }
+
+                    UsageLimit::upsert([
+                        'company_id' => $companyId,
+                        'subscription_id' => $subscriptionId,
+                        'resource_key' => $resourceKey,
+                        'hard_limit' => max(0, $hardLimit),
+                        'soft_limit' => max(0, $softLimit),
+                        'current_usage' => 0,
+                        'reset_period' => in_array($resetPeriod, ['daily', 'weekly', 'monthly', 'never'], true) ? $resetPeriod : 'monthly',
+                        'resets_at' => $periodEnd,
+                        'is_blocking' => $isBlocking,
+                    ]);
+                }
+            }
+        }
+
+        $this->redirectWithFlash('success', 'Assinatura criada com sucesso (ID ' . $subscriptionId . ').', 'superadmin/billing?company_id=' . $companyId);
+    }
+
+    /** POST /superadmin/billing/invoices/create-draft */
+    public function billingCreateInvoiceDraft(): void
+    {
+        SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('billing.manage');
+
+        require_once __DIR__ . '/../models/Invoice.php';
+        require_once __DIR__ . '/../models/Subscription.php';
+
+        $companyId = (int)($_POST['company_id'] ?? 0);
+        $amountTotal = (float)($_POST['amount_total'] ?? 0);
+        $currency = strtoupper(trim((string)($_POST['currency'] ?? 'BRL')));
+        $dueDateInput = trim((string)($_POST['due_date'] ?? ''));
+
+        $company = Company::find($companyId);
+        if (!$company) {
+            $this->redirectWithFlash('error', 'Empresa invalida para faturamento.', 'superadmin/billing');
+        }
+
+        if ($amountTotal <= 0) {
+            $this->redirectWithFlash('error', 'Valor total da fatura deve ser maior que zero.', 'superadmin/billing?company_id=' . $companyId);
+        }
+
+        $dueDate = null;
+        if ($dueDateInput !== '') {
+            $ts = strtotime($dueDateInput);
+            if ($ts !== false) {
+                $dueDate = date('Y-m-d H:i:s', $ts);
+            }
+        }
+        if ($dueDate === null) {
+            $dueDate = date('Y-m-d H:i:s', strtotime('+7 days'));
+        }
+
+        $currentSubscription = Subscription::currentByCompany($companyId);
+
+        $invoiceId = Invoice::createDraft([
+            'company_id' => $companyId,
+            'subscription_id' => $currentSubscription['id'] ?? null,
+            'status' => 'open',
+            'currency' => $currency !== '' ? $currency : 'BRL',
+            'amount_subtotal' => $amountTotal,
+            'amount_tax' => 0,
+            'amount_discount' => 0,
+            'amount_total' => $amountTotal,
+            'due_date' => $dueDate,
+            'payload_json' => [
+                'source' => 'superadmin_manual',
+                'created_at' => date('c'),
+            ],
+        ]);
+
+        $this->redirectWithFlash('success', 'Fatura criada com sucesso (ID ' . $invoiceId . ').', 'superadmin/billing?company_id=' . $companyId);
+    }
+
+    /** POST /superadmin/billing/subscriptions/{id}/status */
+    public function billingUpdateSubscriptionStatus(array $params = []): void
+    {
+        SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('billing.manage');
+
+        require_once __DIR__ . '/../models/Subscription.php';
+
+        $subscriptionId = (int)($params['id'] ?? 0);
+        $newStatus = trim((string)($_POST['status'] ?? ''));
+        $allowedStatuses = ['trialing', 'active', 'past_due', 'canceled', 'incomplete', 'paused'];
+
+        if ($subscriptionId < 1 || !in_array($newStatus, $allowedStatuses, true)) {
+            $this->redirectWithFlash('error', 'Dados invalidos para atualizar assinatura.', 'superadmin/billing');
+        }
+
+        $stmt = $this->db()->prepare('SELECT id, company_id, status FROM subscriptions WHERE id = ? LIMIT 1');
+        $stmt->execute([$subscriptionId]);
+        $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$subscription) {
+            $this->redirectWithFlash('error', 'Assinatura nao encontrada.', 'superadmin/billing');
+        }
+
+        if ((string)($subscription['status'] ?? '') === $newStatus) {
+            $this->redirectWithFlash('success', 'Status ja estava atualizado.', 'superadmin/billing?company_id=' . (int)$subscription['company_id']);
+        }
+
+        $canceledAt = $newStatus === 'canceled' ? date('Y-m-d H:i:s') : null;
+        Subscription::updateStatus($subscriptionId, $newStatus, $canceledAt);
+
+        $this->redirectWithFlash('success', 'Status da assinatura atualizado para ' . $newStatus . '.', 'superadmin/billing?company_id=' . (int)$subscription['company_id']);
+    }
+
+    /** POST /superadmin/billing/invoices/{id}/mark-paid */
+    public function billingMarkInvoicePaid(array $params = []): void
+    {
+        SuperAdminMiddleware::enforce();
+        PermissionMiddleware::enforce('billing.manage');
+
+        require_once __DIR__ . '/../models/Invoice.php';
+
+        $invoiceId = (int)($params['id'] ?? 0);
+        if ($invoiceId < 1) {
+            $this->redirectWithFlash('error', 'Fatura invalida para confirmacao.', 'superadmin/billing');
+        }
+
+        $stmt = $this->db()->prepare('SELECT id, company_id, status FROM invoices WHERE id = ? LIMIT 1');
+        $stmt->execute([$invoiceId]);
+        $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$invoice) {
+            $this->redirectWithFlash('error', 'Fatura nao encontrada.', 'superadmin/billing');
+        }
+
+        if ((string)($invoice['status'] ?? '') === 'paid') {
+            $this->redirectWithFlash('success', 'Fatura ja estava marcada como paga.', 'superadmin/billing?company_id=' . (int)$invoice['company_id']);
+        }
+
+        Invoice::markPaid($invoiceId);
+
+        $this->redirectWithFlash('success', 'Fatura marcada como paga com sucesso.', 'superadmin/billing?company_id=' . (int)$invoice['company_id']);
     }
 }
 

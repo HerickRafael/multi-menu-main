@@ -5,6 +5,7 @@ services:
       dockerfile: documentations/Dockerfile
     container_name: multi_menu_app
     restart: unless-stopped
+    command: sh -lc "a2enmod headers expires >/dev/null 2>&1 || true; composer dump-autoload --no-dev -o >/dev/null && apache2-foreground"
     ports:
       # Evita conflito com outro serviço na 8080 do host
       - "8088:80"
@@ -26,10 +27,16 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     volumes:
       - ./public/assets:/var/www/html/public/assets
+      - ./public/superadmin:/var/www/html/public/superadmin
       - ./public/uploads:/var/www/html/public/uploads
       - ./storage/logs:/var/www/html/storage/logs
       - ./storage/cache:/var/www/html/storage/cache
+      - ./composer.json:/var/www/html/composer.json
+      - ./composer.lock:/var/www/html/composer.lock
       - ./app:/var/www/html/app
+      - ./apps:/var/www/html/apps
+      - ./routes:/var/www/html/routes
+      - ./scripts:/var/www/html/scripts
     depends_on:
       - db
     networks:

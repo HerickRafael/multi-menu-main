@@ -1,6 +1,6 @@
-import { memo, useMemo, useState } from 'react'
-import { useLocation, Link } from 'react-router-dom'
-import { ChevronRight, Moon, Sun, Monitor, Search, LogOut, User, Settings, Zap } from 'lucide-react'
+import { memo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Menu, X, Search, LogOut, User, Settings, Moon, Sun, Monitor, Bell, HelpCircle, ChevronRight } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,55 +15,35 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useUIStore } from '@/js/stores/uiStore'
 import { useAuthStore } from '@/js/stores/authStore'
-import { useCompanyFilterStore } from '@/js/stores/companyFilterStore'
 import { useAuth } from '@/js/hooks/useAuth'
-import { useStoresData } from '@/js/hooks/usePhase3Data'
 import { useTheme } from '@/js/providers/ThemeProvider'
 import { useTenant } from '@/js/contexts/TenantContext'
 import { TenantSwitcher } from '@/modules/tenant/components/TenantSwitcher'
-import { PLATFORM_NAV_GROUPS, TENANT_NAV_GROUPS } from '@/js/lib/constants'
 import { cn } from '@/js/lib/utils'
 
-// ─── Breadcrumbs ─────────────────────────────────────────────────────────────
-function Breadcrumbs({ navItemLabels, rootHref }: { navItemLabels: Record<string, string>; rootHref: string }) {
-  const location = useLocation()
-  const crumbs = useMemo(() => {
-    const segments = location.pathname.replace('/superadmin', '').split('/').filter(Boolean)
 
-    return segments.map((seg, idx) => {
-      const path = '/superadmin/' + segments.slice(0, idx + 1).join('/')
-      return { label: navItemLabels[path] ?? capitalize(seg), path }
-    })
-  }, [location.pathname, navItemLabels])
-
-  if (crumbs.length === 0) return null
-
+// ─── Logo + Brand Section ────────────────────────────────────────────────────
+function BrandSection({ isCollapsed }: { isCollapsed: boolean }) {
   return (
-    <nav aria-label="breadcrumb" className="flex items-center gap-1 text-sm text-muted-foreground">
-      <Link to={rootHref} className="hover:text-foreground transition-colors">
-        Super Admin
-      </Link>
-      {crumbs.map((crumb, i) => (
-        <span key={crumb.path} className="flex items-center gap-1">
-          <ChevronRight className="h-3.5 w-3.5" />
-          {i === crumbs.length - 1 ? (
-            <span className="text-foreground font-medium">{crumb.label}</span>
-          ) : (
-            <Link to={crumb.path} className="hover:text-foreground transition-colors">
-              {crumb.label}
-            </Link>
-          )}
-        </span>
-      ))}
-    </nav>
+    <Link 
+      to="/superadmin/platform/stores" 
+      className="flex items-center gap-2.5 hover:opacity-80 transition-opacity py-2"
+    >
+      <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+        <span className="text-primary-foreground font-bold text-xs">MM</span>
+      </div>
+      {!isCollapsed && (
+        <div className="hidden sm:flex flex-col">
+          <span className="text-sm font-semibold text-foreground leading-none">Multi Menu</span>
+          <span className="text-[10px] text-muted-foreground leading-none">Admin</span>
+        </div>
+      )}
+    </Link>
   )
 }
 
-function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1).replace(/-/g, ' ')
-}
 
-// ─── Theme toggle ─────────────────────────────────────────────────────────────
+// ─── Theme Toggle ─────────────────────────────────────────────────────────────
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
   const cycles: Array<typeof theme> = ['light', 'dark', 'system']
@@ -73,14 +53,48 @@ function ThemeToggle() {
   return (
     <Button
       variant="ghost"
-      size="icon-sm"
+      size="sm"
+      className="h-8 w-8 p-0"
       onClick={() => setTheme(next)}
-      aria-label={`Tema: ${theme}. Clique para mudar para ${next}`}
+      title={`Tema: ${theme}`}
+      aria-label={`Mudar tema (atual: ${theme})`}
     >
       <Icon className="h-4 w-4" />
     </Button>
   )
 }
+
+// ─── Help Button ──────────────────────────────────────────────────────────────
+function HelpButton() {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-8 w-8 p-0"
+      title="Ajuda"
+      aria-label="Abrir ajuda"
+    >
+      <HelpCircle className="h-4 w-4" />
+    </Button>
+  )
+}
+
+// ─── Notifications Button ─────────────────────────────────────────────────────
+function NotificationsButton() {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-8 w-8 p-0 relative"
+      title="Notificações"
+      aria-label="Abrir notificações"
+    >
+      <Bell className="h-4 w-4" />
+      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive animate-pulse" />
+    </Button>
+  )
+}
+
 
 // ─── User menu ────────────────────────────────────────────────────────────────
 function UserMenu() {
@@ -136,121 +150,88 @@ function UserMenu() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          className="text-destructive focus:text-destructive"
+          className="text-destructive focus:text-destructive cursor-pointer"
           onClick={() => logout()}
           disabled={isLoggingOut}
         >
-          <LogOut className="h-4 w-4" />
+          <LogOut className="h-4 w-4 mr-2" />
           {isLoggingOut ? 'Saindo…' : 'Sair'}
-          <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
 
-// ─── App Header ──────────────────────────────────────────────────────────────
+// ─── Main App Header (iFood Style) ────────────────────────────────────────────
 export const AppHeader = memo(function AppHeader() {
   const [tenantSwitcherOpen, setTenantSwitcherOpen] = useState(false)
+  const sidebarCollapsed = useUIStore((state) => state.sidebarCollapsed)
+  const toggleSidebar = useUIStore((state) => state.toggleSidebar)
   const setCommandMenuOpen = useUIStore((state) => state.setCommandMenuOpen)
-  const selectedCompanyId = useCompanyFilterStore((state) => state.selectedCompanyId)
-  const setSelectedCompanyId = useCompanyFilterStore((state) => state.setSelectedCompanyId)
-  const { selectedTenantId, tenantName, selectedTenantSlug } = useTenant()
-  const location = useLocation()
-  const navMode = location.pathname.startsWith('/superadmin/tenant/') ? 'tenant' : 'platform'
-  const storesQuery = useStoresData({ page: 1, per_page: 300, search: '', status: '' })
-  const storeItems = storesQuery.data?.items ?? []
-  const tenantSlug = selectedTenantSlug || 'select-tenant'
-
-  const navGroups = useMemo(() => {
-    const baseGroups = navMode === 'tenant' ? TENANT_NAV_GROUPS : PLATFORM_NAV_GROUPS
-    return baseGroups.map((group) => ({
-      ...group,
-      items: group.items.map((item) => ({
-        ...item,
-        href: item.href.replace(':slug', tenantSlug),
-      })),
-    }))
-  }, [navMode, tenantSlug])
-
-  const navItemLabels = useMemo(() => {
-    return navGroups
-      .flatMap((group) => group.items)
-      .reduce<Record<string, string>>((acc, item) => {
-        acc[item.href] = item.title
-        return acc
-      }, {})
-  }, [navGroups])
-
-  const rootHref = navMode === 'tenant'
-    ? `/superadmin/tenant/${tenantSlug}/dashboard`
-    : '/superadmin/platform/stores'
+  const { selectedTenantId, tenantName } = useTenant()
 
   return (
     <>
       <header className={cn(
-        'sticky top-0 z-40 flex h-12 items-center gap-4 px-4',
-        'border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60',
+        'sticky top-0 z-40 h-12 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60',
+        'border-b border-border flex items-center gap-3 px-3 sm:px-4',
       )}>
-        {/* Breadcrumbs */}
-        <div className="flex-1 min-w-0">
-          <Breadcrumbs navItemLabels={navItemLabels} rootHref={rootHref} />
+        {/* Left: Sidebar Toggle + Brand Logo */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 lg:hidden"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? 'Abrir menu' : 'Fechar menu'}
+            aria-label="Menu"
+          >
+            {sidebarCollapsed ? <Menu className="h-5 w-5" /> : <X className="h-5 w-5" />}
+          </Button>
+          <BrandSection isCollapsed={sidebarCollapsed} />
         </div>
 
-        <div className="hidden md:flex items-center gap-2">
-          {/* Tenant Switcher Button */}
+        {/* Center: Tenant Switcher (Desktop only) */}
+        <div className="hidden md:flex flex-1 items-center justify-center gap-2">
           {selectedTenantId && (
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => setTenantSwitcherOpen(true)}
-              className="h-7 text-xs flex items-center gap-1.5 px-2"
+              className="h-8 text-xs flex items-center gap-2 px-3 hover:bg-accent"
               title="Mudar empresa"
             >
-              <Zap className="w-3 h-3 text-amber-500" />
-              <span className="truncate max-w-[120px]">{tenantName}</span>
+              <span className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
+              <span className="truncate max-w-[200px] font-medium">{tenantName}</span>
+              <ChevronRight className="h-3 w-3 opacity-50 flex-shrink-0" />
             </Button>
-          )}
-
-          {navMode === 'platform' && (
-            <>
-              <label htmlFor="global-company-filter" className="sr-only">Filtro global de loja</label>
-              <select
-                id="global-company-filter"
-                value={selectedCompanyId ?? ''}
-                onChange={(e) => {
-                  const nextValue = e.target.value
-                  setSelectedCompanyId(nextValue === '' ? null : Number(nextValue))
-                }}
-                className="h-7 rounded-md border border-input bg-background px-2 text-xs"
-              >
-                <option value="">Todas as lojas</option>
-                {storeItems.map((store) => (
-                  <option key={store.id} value={store.id}>{store.name}</option>
-                ))}
-              </select>
-            </>
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-1.5">
-          {/* Command menu trigger */}
+        {/* Right: Actions */}
+        <div className="ml-auto flex items-center gap-1">
+          {/* Search */}
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => setCommandMenuOpen(true)}
-            className="hidden sm:flex items-center gap-2 h-7 text-xs text-muted-foreground px-2"
-            aria-label="Abrir menu de comandos"
+            className="h-8 w-8 p-0"
+            title="Buscar (⌘K)"
+            aria-label="Buscar"
           >
-            <Search className="h-3 w-3" />
-            <span>Buscar...</span>
-            <kbd className="pointer-events-none ml-1 flex h-5 select-none items-center gap-0.5 rounded border bg-muted px-1.5 font-mono text-[10px] opacity-100">
-              <span>⌘K</span>
-            </kbd>
+            <Search className="h-4 w-4" />
           </Button>
 
+          {/* Help */}
+          <HelpButton />
+
+          {/* Notifications */}
+          <NotificationsButton />
+
+          {/* Theme Toggle */}
           <ThemeToggle />
+
+          {/* User Menu */}
           <UserMenu />
         </div>
       </header>

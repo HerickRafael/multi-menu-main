@@ -27,7 +27,7 @@ class IFoodService
     private PDO $db;
     private int $companyId;
     private ?array $config = null;
-    
+
     /**
      * Constructor
      */
@@ -35,6 +35,22 @@ class IFoodService
     {
         $this->db = $db;
         $this->companyId = $companyId;
+    }
+
+    /**
+     * Returns the correct merchant ID for the active environment.
+     * Sandbox uses sandbox_merchant_id; production uses merchant_id.
+     */
+    public function getActiveMerchantId(): string
+    {
+        $config = $this->getConfig();
+        if (!$config) return '';
+
+        $env = strtolower(trim((string)($config['environment'] ?? 'production')));
+        if ($env === 'sandbox') {
+            return (string)($config['sandbox_merchant_id'] ?? $config['merchant_id'] ?? '');
+        }
+        return (string)($config['merchant_id'] ?? '');
     }
     
     /**
@@ -118,8 +134,8 @@ class IFoodService
             return ['success' => false, 'error' => 'Could not get access token'];
         }
         
-        // Get events with x-polling-merchants header
-        $merchantId = $config['merchant_id'] ?? '';
+        // Get events with x-polling-merchants header (respects sandbox vs production)
+        $merchantId = $this->getActiveMerchantId();
         $extraHeaders = $merchantId ? ['x-polling-merchants: ' . $merchantId] : [];
         $response = $this->httpRequest('GET', self::API_BASE_URL . '/order/v1.0/events:polling', [], true, false, $extraHeaders);
         
@@ -208,36 +224,329 @@ class IFoodService
             case 'PLACED':
                 $this->handleNewOrder($orderId);
                 break;
-                
+
             case 'CONFIRMED':
                 $this->updateOrderStatus($orderId, 'CONFIRMED', 'confirmed_at');
                 break;
-                
+
             case 'READY_TO_PICKUP':
                 $this->updateOrderStatus($orderId, 'READY_TO_PICKUP', 'ready_at');
                 break;
-                
+
             case 'DISPATCHED':
                 $this->updateOrderStatus($orderId, 'DISPATCHED', 'dispatched_at');
+                // Pode trazer metadata.driver (entregador atribuído junto)
+                $this->handleDriverEvent($orderId, 'DISPATCHED', $metadata);
+                $this->handleShippingEvent($orderId, 'DISPATCHED', $metadata);
                 break;
-                
+
             case 'CONCLUDED':
                 $this->updateOrderStatus($orderId, 'CONCLUDED', 'concluded_at');
+                $this->handleDriverEvent($orderId, 'CONCLUDED', $metadata);
+                $this->handleShippingEvent($orderId, 'CONCLUDED', $metadata);
                 break;
-                
+
             case 'CANCELLED':
                 $this->handleCancellation($orderId, $metadata);
+                $this->handleDriverEvent($orderId, 'CANCELLED', $metadata);
+                $this->handleShippingEvent($orderId, 'CANCELLED', $metadata);
                 break;
-                
+
             case 'CANCELLATION_REQUESTED':
                 // Could auto-accept or notify admin
                 $this->handleCancellationRequest($orderId, $metadata);
                 break;
-                
+
+            // Eventos de ciclo de vida do entregador (logistics)
+            case 'ASSIGN_DRIVER':
+            case 'DRIVER_ASSIGNED':
+            case 'GOING_TO_ORIGIN':
+            case 'ARRIVED_AT_ORIGIN':
+            case 'PICKED_UP':
+            case 'GOING_TO_DESTINATION':
+            case 'GOING_TO_CONSUMER':
+            case 'ARRIVED_AT_DESTINATION':
+            case 'ARRIVED_AT_CONSUMER':
+            case 'DELIVERED':
+            case 'DRIVER_CANCELLED':
+                $this->handleDriverEvent($orderId, $fullCode, $metadata);
+                $this->handleShippingEvent($orderId, $fullCode, $metadata);
+                break;
+
             default:
-                // Log other events for reference
+                // Eventos desconhecidos com metadata.driver ainda recebem update
+                // (tolerância a fullCodes que o iFood adicionar no futuro).
+                if (!empty($metadata['driver']) || !empty($metadata['delivery']['driver'])) {
+                    $this->handleDriverEvent($orderId, $fullCode ?: 'DRIVER_EVENT', $metadata);
+                    $this->handleShippingEvent($orderId, $fullCode ?: 'SHIPPING_EVENT', $metadata);
+                }
                 break;
         }
+    }
+
+    /**
+     * Atualiza ifood_order_drivers a partir de um evento de webhook.
+     *
+     * Best-effort: nunca lança. Eventos do iFood podem ter formatos
+     * variados; a função extrai o que conseguir e ignora o resto.
+     *
+     * Mapeamento de fullCode → request_status / timestamp:
+     *   DISPATCHED, ASSIGN_DRIVER, DRIVER_ASSIGNED        → ASSIGNED + assigned_at
+     *   PICKED_UP, GOING_TO_DESTINATION                   → ASSIGNED + picked_up_at
+     *   CONCLUDED, DELIVERED, ARRIVED_AT_*                → COMPLETED + delivered_at
+     *   CANCELLED, DRIVER_CANCELLED                       → CANCELLED + cancelled_at
+     *   GOING_TO_ORIGIN, ARRIVED_AT_ORIGIN                → ASSIGNED (sem timestamp novo)
+     *
+     * @param array<string,mixed> $metadata
+     */
+    private function handleDriverEvent(string $ifoodOrderId, string $fullCode, array $metadata): void
+    {
+        if ($ifoodOrderId === '') {
+            return;
+        }
+
+        try {
+            $order = null;
+            $stmt = $this->db->prepare(
+                'SELECT ifood_display_id, delivered_by FROM ifood_orders
+                  WHERE company_id = ? AND ifood_order_id = ? LIMIT 1'
+            );
+            $stmt->execute([$this->companyId, $ifoodOrderId]);
+            $order = $stmt->fetch(\PDO::FETCH_ASSOC) ?: null;
+
+            // Se o pedido não existe localmente, ignora silenciosamente —
+            // pode ser um evento de pedido que ainda não foi sincronizado.
+            if ($order === null) {
+                return;
+            }
+
+            $driver = $this->extractDriver($metadata);
+            [$status, $tsCol] = $this->mapDriverStatusAndTimestamp($fullCode);
+
+            $env = $this->resolveEnvironment();
+            $now = date('Y-m-d H:i:s');
+
+            $sql = "INSERT INTO ifood_order_drivers
+                (company_id, environment, ifood_order_id, order_display_id,
+                 request_status, driver_id, driver_name, driver_phone, vehicle_type,
+                 assigned_at, picked_up_at, delivered_at, cancelled_at,
+                 last_response_status, raw_response)
+                VALUES
+                (:cid, :env, :oid, :did, :st, :drid, :drn, :drp, :vt,
+                 :assigned, :picked, :delivered, :cancelled, NULL, :raw)
+                ON DUPLICATE KEY UPDATE
+                  request_status   = IF(VALUES(request_status) IS NULL, request_status, VALUES(request_status)),
+                  driver_id        = COALESCE(VALUES(driver_id), driver_id),
+                  driver_name      = COALESCE(VALUES(driver_name), driver_name),
+                  driver_phone     = COALESCE(VALUES(driver_phone), driver_phone),
+                  vehicle_type     = COALESCE(VALUES(vehicle_type), vehicle_type),
+                  order_display_id = COALESCE(VALUES(order_display_id), order_display_id),
+                  assigned_at      = COALESCE(assigned_at, VALUES(assigned_at)),
+                  picked_up_at     = COALESCE(picked_up_at, VALUES(picked_up_at)),
+                  delivered_at     = COALESCE(delivered_at, VALUES(delivered_at)),
+                  cancelled_at     = COALESCE(cancelled_at, VALUES(cancelled_at)),
+                  raw_response     = VALUES(raw_response)";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':cid'      => $this->companyId,
+                ':env'      => $env,
+                ':oid'      => $ifoodOrderId,
+                ':did'      => $order['ifood_display_id'] ?: null,
+                ':st'       => $status,
+                ':drid'     => $driver['id'] ?? null,
+                ':drn'      => $driver['name'] ?? null,
+                ':drp'      => $driver['phone'] ?? null,
+                ':vt'       => $driver['vehicle_type'] ?? null,
+                ':assigned' => $tsCol === 'assigned_at'  ? $now : null,
+                ':picked'   => $tsCol === 'picked_up_at' ? $now : null,
+                ':delivered'=> $tsCol === 'delivered_at' ? $now : null,
+                ':cancelled'=> $tsCol === 'cancelled_at' ? $now : null,
+                ':raw'      => json_encode(['fullCode' => $fullCode, 'metadata' => $metadata], JSON_UNESCAPED_UNICODE),
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[IFoodService] handleDriverEvent falhou: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Atualiza `ifood_shipping_orders` a partir de um evento de webhook.
+     *
+     * Lookup: `ifood_shipping_id = $ifoodOrderId` (o orderId do evento iFood
+     * casa com o ID que recebemos no POST /shipping/v1.0/orders).
+     *
+     * Se não houver match, é um evento de pedido nativo (não-shipping), e
+     * retornamos silencioso — é caminho normal, não erro.
+     *
+     * Best-effort: nunca lança.
+     *
+     * Mapeamento fullCode → (status local, coluna de timestamp):
+     *   ASSIGN_DRIVER, DRIVER_ASSIGNED, DISPATCHED, GOING_TO_ORIGIN  → CONFIRMED + accepted_at (se nulo)
+     *   PICKED_UP, GOING_TO_DESTINATION/CONSUMER                    → PICKED_UP + picked_up_at
+     *   CONCLUDED, DELIVERED, ARRIVED_AT_DESTINATION/CONSUMER       → DELIVERED + delivered_at
+     *   CANCELLED, DRIVER_CANCELLED                                 → CANCELLED + cancelled_at
+     *
+     * Após atingir estado terminal (DELIVERED/CANCELLED), zera next_poll_at
+     * para o cron parar de polar.
+     *
+     * @param array<string,mixed> $metadata
+     */
+    private function handleShippingEvent(string $ifoodShippingId, string $fullCode, array $metadata): void
+    {
+        if ($ifoodShippingId === '') {
+            return;
+        }
+
+        try {
+            $stmt = $this->db->prepare(
+                'SELECT id, status, environment
+                   FROM ifood_shipping_orders
+                  WHERE company_id = ? AND ifood_shipping_id = ?
+                  LIMIT 1'
+            );
+            $stmt->execute([$this->companyId, $ifoodShippingId]);
+            $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$row) {
+                return; // não é shipping order — silencioso
+            }
+
+            [$newStatus, $tsCol] = $this->mapShippingStatusAndTimestamp($fullCode);
+            if ($newStatus === null) {
+                return;
+            }
+
+            // Estado já é terminal → ignora (evita downgrade DELIVERED → CONFIRMED por evento atrasado).
+            $current = (string) $row['status'];
+            if (in_array($current, ['DELIVERED', 'CANCELLED', 'REJECTED', 'FAILED'], true)) {
+                return;
+            }
+
+            $rowId = (int) $row['id'];
+            $sets = ['status = :st', 'response_payload = :resp'];
+            if ($tsCol !== null) {
+                // COALESCE preserva primeiro timestamp (não sobrescreve em eventos duplicados)
+                $sets[] = "{$tsCol} = COALESCE({$tsCol}, NOW())";
+            }
+            // accepted_at também é populado na primeira vez que vamos para CONFIRMED ou além.
+            if (in_array($newStatus, ['ACCEPTED', 'CONFIRMED', 'PICKED_UP', 'DELIVERED'], true)) {
+                $sets[] = 'accepted_at = COALESCE(accepted_at, NOW())';
+            }
+            // Estados terminais zeram next_poll_at.
+            if (in_array($newStatus, ['DELIVERED', 'CANCELLED'], true)) {
+                $sets[] = 'next_poll_at = NULL';
+            }
+
+            $sql = 'UPDATE ifood_shipping_orders SET ' . implode(', ', $sets) . ' WHERE id = :id';
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':st'   => $newStatus,
+                ':resp' => json_encode(['fullCode' => $fullCode, 'metadata' => $metadata], JSON_UNESCAPED_UNICODE),
+                ':id'   => $rowId,
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[IFoodService] handleShippingEvent falhou: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * @return array{0:?string,1:?string}  [novo_status, coluna_de_timestamp]
+     */
+    private function mapShippingStatusAndTimestamp(string $fullCode): array
+    {
+        $code = strtoupper($fullCode);
+
+        $delivered = ['DELIVERED', 'CONCLUDED', 'ARRIVED_AT_DESTINATION', 'ARRIVED_AT_CONSUMER'];
+        $cancelled = ['CANCELLED', 'DRIVER_CANCELLED'];
+        $pickedUp  = ['PICKED_UP', 'GOING_TO_DESTINATION', 'GOING_TO_CONSUMER'];
+        $confirmed = ['DISPATCHED', 'ASSIGN_DRIVER', 'DRIVER_ASSIGNED', 'GOING_TO_ORIGIN', 'ARRIVED_AT_ORIGIN'];
+
+        if (in_array($code, $delivered, true)) {
+            return ['DELIVERED', 'delivered_at'];
+        }
+        if (in_array($code, $cancelled, true)) {
+            return ['CANCELLED', 'cancelled_at'];
+        }
+        if (in_array($code, $pickedUp, true)) {
+            return ['PICKED_UP', 'picked_up_at'];
+        }
+        if (in_array($code, $confirmed, true)) {
+            return ['CONFIRMED', null];
+        }
+        return [null, null];
+    }
+
+    /**
+     * Mapeia fullCode para (request_status, coluna de timestamp).
+     *
+     * @return array{0:?string,1:?string}
+     */
+    private function mapDriverStatusAndTimestamp(string $fullCode): array
+    {
+        $code = strtoupper($fullCode);
+        $assigned   = ['ASSIGN_DRIVER', 'DRIVER_ASSIGNED', 'DISPATCHED', 'GOING_TO_ORIGIN', 'ARRIVED_AT_ORIGIN'];
+        $pickedUp   = ['PICKED_UP', 'GOING_TO_DESTINATION', 'GOING_TO_CONSUMER'];
+        $delivered  = ['DELIVERED', 'CONCLUDED', 'ARRIVED_AT_DESTINATION', 'ARRIVED_AT_CONSUMER'];
+        $cancelled  = ['CANCELLED', 'DRIVER_CANCELLED'];
+
+        if (in_array($code, $delivered, true)) {
+            return ['COMPLETED', 'delivered_at'];
+        }
+        if (in_array($code, $cancelled, true)) {
+            return ['CANCELLED', 'cancelled_at'];
+        }
+        if (in_array($code, $pickedUp, true)) {
+            // Quando o entregador retira o pedido, mantemos request_status=ASSIGNED
+            // (já estava atribuído); só atualizamos o timestamp picked_up_at.
+            return ['ASSIGNED', 'picked_up_at'];
+        }
+        if (in_array($code, $assigned, true)) {
+            return ['ASSIGNED', 'assigned_at'];
+        }
+        // Evento desconhecido com driver no metadata — registra sem mudar status.
+        return [null, null];
+    }
+
+    /**
+     * Extrai info do entregador do metadata do evento.
+     *
+     * @param array<string,mixed> $metadata
+     * @return array<string,?string>
+     */
+    private function extractDriver(array $metadata): array
+    {
+        $driver = $metadata['driver']
+            ?? $metadata['delivery']['driver']
+            ?? $metadata['logistics']['driver']
+            ?? [];
+
+        if (!is_array($driver)) {
+            return [];
+        }
+
+        $vehicle = $driver['vehicle'] ?? $driver['vehicleType'] ?? null;
+        $vehicleType = null;
+        if (is_array($vehicle)) {
+            $vehicleType = (string) ($vehicle['type'] ?? $vehicle['name'] ?? '');
+        } elseif (is_string($vehicle)) {
+            $vehicleType = $vehicle;
+        }
+
+        return [
+            'id'           => isset($driver['id']) ? (string) $driver['id'] : null,
+            'name'         => isset($driver['name']) ? (string) $driver['name'] : null,
+            'phone'        => isset($driver['phone']) ? (string) $driver['phone'] : (isset($driver['phoneNumber']) ? (string) $driver['phoneNumber'] : null),
+            'vehicle_type' => $vehicleType !== null && $vehicleType !== '' ? $vehicleType : null,
+        ];
+    }
+
+    /**
+     * Resolve o environment ativo da integração (cacheado em getConfig).
+     */
+    private function resolveEnvironment(): string
+    {
+        $config = $this->getConfig();
+        $env = strtolower(trim((string) ($config['environment'] ?? 'production')));
+        return $env === 'sandbox' ? 'sandbox' : 'production';
     }
     
     /**
@@ -318,8 +627,8 @@ class IFoodService
             'additional_fees' => $total['additionalFees'] ?? 0,
             'pickup_code' => $delivery['pickupCode'] ?? null,
             'delivered_by' => $delivery['deliveredBy'] ?? 'IFOOD',
-            'scheduled_datetime' => $scheduledDatetime,
-            'ifood_created_at' => $orderDetails['createdAt'] ?? null,
+            'scheduled_datetime' => $this->toMysqlDatetime($scheduledDatetime),
+            'ifood_created_at' => $this->toMysqlDatetime($orderDetails['createdAt'] ?? null),
             'raw_data' => json_encode($orderDetails),
         ]);
         
@@ -438,10 +747,13 @@ class IFoodService
         ]);
         
         $orderId = (int) $this->db->lastInsertId();
-        
-        // Create order items
-        $this->createOrderItems($orderId, $orderDetails['items'] ?? []);
-        
+
+        try {
+            $this->createOrderItems($orderId, $orderDetails['items'] ?? []);
+        } catch (\Throwable $e) {
+            $this->logError('createOrderItems failed for order ' . $orderId . ': ' . $e->getMessage());
+        }
+
         return $orderId;
     }
     
@@ -945,7 +1257,7 @@ class IFoodService
             'code' => $event['code'] ?? '',
             'full_code' => $event['fullCode'] ?? '',
             'metadata' => json_encode($event['metadata'] ?? []),
-            'created_at' => $event['createdAt'] ?? null
+            'created_at' => $this->toMysqlDatetime($event['createdAt'] ?? null)
         ]);
     }
     
@@ -1002,31 +1314,46 @@ class IFoodService
                 $fields[] = 'auto_confirm = :auto_confirm';
                 $params['auto_confirm'] = $data['auto_confirm'] ? 1 : 0;
             }
-            
+
+            if (isset($data['environment'])) {
+                $env = strtolower(trim((string)$data['environment']));
+                $fields[] = 'environment = :environment';
+                $params['environment'] = $env === 'sandbox' ? 'sandbox' : 'production';
+            }
+
+            if (array_key_exists('sandbox_merchant_id', $data)) {
+                $fields[] = 'sandbox_merchant_id = :sandbox_merchant_id';
+                $params['sandbox_merchant_id'] = $data['sandbox_merchant_id'] !== '' ? $data['sandbox_merchant_id'] : null;
+            }
+
             if (empty($fields)) {
                 return true;
             }
-            
+
             $sql = "UPDATE ifood_integrations SET " . implode(', ', $fields) . ", updated_at = NOW() WHERE company_id = :company_id";
             $stmt = $this->db->prepare($sql);
             return $stmt->execute($params);
         } else {
+            $env = strtolower(trim((string)($data['environment'] ?? 'production')));
+            $env = $env === 'sandbox' ? 'sandbox' : 'production';
             $stmt = $this->db->prepare("
                 INSERT INTO ifood_integrations (
-                    company_id, client_id, client_secret, merchant_id,
-                    is_active, auto_confirm
+                    company_id, client_id, client_secret, merchant_id, sandbox_merchant_id,
+                    is_active, environment, auto_confirm
                 ) VALUES (
-                    :company_id, :client_id, :client_secret, :merchant_id,
-                    :is_active, :auto_confirm
+                    :company_id, :client_id, :client_secret, :merchant_id, :sandbox_merchant_id,
+                    :is_active, :environment, :auto_confirm
                 )
             ");
-            
+
             return $stmt->execute([
                 'company_id' => $this->companyId,
                 'client_id' => $data['client_id'] ?? null,
                 'client_secret' => isset($data['client_secret']) ? $this->encrypt($data['client_secret']) : null,
                 'merchant_id' => $data['merchant_id'] ?? null,
+                'sandbox_merchant_id' => !empty($data['sandbox_merchant_id']) ? $data['sandbox_merchant_id'] : null,
                 'is_active' => ($data['is_active'] ?? false) ? 1 : 0,
+                'environment' => $env,
                 'auto_confirm' => ($data['auto_confirm'] ?? false) ? 1 : 0,
             ]);
         }
@@ -1050,6 +1377,24 @@ class IFoodService
         ]);
     }
     
+    /**
+     * Convert an iFood ISO-8601 datetime string (e.g. "2026-05-24T21:00:00Z" or
+     * "2026-05-24T18:00:00-03:00") to a MySQL-compatible "Y-m-d H:i:s" in UTC.
+     * Returns null when the input is empty or unparseable.
+     */
+    private function toMysqlDatetime(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        try {
+            $dt = new \DateTimeImmutable($value, new \DateTimeZone('UTC'));
+            return $dt->format('Y-m-d H:i:s');
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     /**
      * Make HTTP request
      */

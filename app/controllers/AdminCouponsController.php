@@ -4,31 +4,13 @@ declare(strict_types=1);
 
 // 🚀 Bootstrap centralizado
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../modules/auth/AdminGuard.php';
 
 class AdminCouponsController extends Controller
 {
     private function guard($slug)
     {
-        Auth::start();
-        $u = Auth::user();
-
-        if (!$u) {
-            header('Location: ' . base_url('admin/' . rawurlencode($slug) . '/login'));
-            exit;
-        }
-        $company = Company::findBySlug($slug);
-
-        if (!$company) {
-            echo 'Empresa inválida';
-            exit;
-        }
-
-        if ($u['role'] !== 'root' && (int)$u['company_id'] !== (int)$company['id']) {
-            echo 'Acesso negado';
-            exit;
-        }
-
-        return [$u, $company];
+        return AdminGuard::requireCompanyAccess((string)$slug, true, 'coupons.manage');
     }
 
     public function index($params)
@@ -112,13 +94,17 @@ class AdminCouponsController extends Controller
         $error = $_SESSION['coupon_error'] ?? null;
         unset($_SESSION['coupon_error']);
 
-        $this->view('admin/coupons/create', [
-            'user' => $user,
-            'company' => $company,
-            'slug' => $slug,
+        $payload = [
             'coupon' => null,
-            'error' => $error
-        ]);
+            'usage_stats' => null,
+            'flash' => ['error' => $error],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/loyalty-discount?section=cupons',
+                'submit' => '/admin/' . rawurlencode($slug) . '/coupons/store',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_COUPON_FORM__', $payload);
     }
 
     public function store($params)
@@ -223,14 +209,31 @@ class AdminCouponsController extends Controller
         $error = $_SESSION['coupon_error'] ?? null;
         unset($_SESSION['coupon_error']);
 
-        $this->view('admin/coupons/create', [
-            'user' => $user,
-            'company' => $company,
-            'slug' => $slug,
-            'coupon' => $coupon,
-            'usage_stats' => $usage_stats,
-            'error' => $error
-        ]);
+        $payload = [
+            'coupon' => [
+                'id' => (int)$coupon['id'],
+                'coupon_code' => (string)($coupon['coupon_code'] ?? ''),
+                'customer_phone' => (string)($coupon['customer_phone'] ?? ''),
+                'discount_percentage' => isset($coupon['discount_percentage']) ? (float)$coupon['discount_percentage'] : 0,
+                'usage_limit' => (int)($coupon['usage_limit'] ?? 0),
+                'times_used' => (int)($coupon['times_used'] ?? 0),
+                'is_used' => (int)($coupon['is_used'] ?? 0) === 1,
+                'allow_multiple_uses_per_customer' => (int)($coupon['allow_multiple_uses_per_customer'] ?? 0) === 1,
+            ],
+            'usage_stats' => $usage_stats ? [
+                'unique_customers' => (int)($usage_stats['unique_customers'] ?? 0),
+                'total_uses' => (int)($usage_stats['total_uses'] ?? 0),
+            ] : null,
+            'flash' => ['error' => $error],
+            'urls' => [
+                'list' => '/admin/' . rawurlencode($slug) . '/loyalty-discount?section=cupons',
+                'submit' => '/admin/' . rawurlencode($slug) . '/coupons/' . (int)$coupon['id'] . '/update',
+                'destroy' => '/admin/' . rawurlencode($slug) . '/coupons/' . (int)$coupon['id'] . '/delete',
+                'toggle' => '/admin/' . rawurlencode($slug) . '/coupons/' . (int)$coupon['id'] . '/toggle',
+            ],
+        ];
+
+        \App\Services\AdminStoreSpaRenderer::render($slug, $company, '__ADMIN_STORE_COUPON_FORM__', $payload);
     }
 
     public function update($params)

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { StoreHour } from '@/components/admin-store/use-store-context'
 import {
   ArrowLeftRight,
@@ -58,6 +58,9 @@ type StoreLayoutPalette = {
   primaryGradient: string
   primaryForeground: string
   accentStrong?: string
+  primaryHsl?: string
+  primaryForegroundHsl?: string
+  ringHsl?: string
 }
 
 export type StoreSection =
@@ -353,9 +356,15 @@ export function StoreDashboardLayout({
     ]
   }, [activeSlug, currentSection])
 
+  const cssVars = {
+    '--primary': palette.primaryHsl ?? palette.primaryColor,
+    '--primary-foreground': palette.primaryForegroundHsl ?? palette.primaryForeground,
+    '--ring': palette.ringHsl ?? palette.primaryHsl ?? palette.primaryColor,
+  } as CSSProperties
+
   return (
     <TooltipProvider>
-      <div className="admin-dashboard-light min-h-screen bg-[#efeff0] text-foreground">
+      <div className="admin-dashboard-light min-h-screen bg-[#efeff0] text-foreground" style={cssVars}>
         {/* Topbar */}
         <header
           className={cn('fixed inset-x-0 top-0 z-50 pr-3', topbarHeightClass)}

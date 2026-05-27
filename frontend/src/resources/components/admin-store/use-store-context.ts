@@ -72,6 +72,22 @@ function luminance(color: string) {
   return 0.2126 * transform(r) + 0.7152 * transform(g) + 0.0722 * transform(b)
 }
 
+// Returns "H S% L%" string for use in CSS custom properties (shadcn format)
+function hexToHslString(color: string): string {
+  const { r, g, b } = hexToRgb(color)
+  const rn = r / 255, gn = g / 255, bn = b / 255
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn)
+  const l = (max + min) / 2
+  if (max === min) return `0 0% ${Math.round(l * 100)}%`
+  const d = max - min
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+  let h = 0
+  if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6
+  else if (max === gn) h = ((bn - rn) / d + 2) / 6
+  else h = ((rn - gn) / d + 4) / 6
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`
+}
+
 export function getPalette(primaryColor?: string, primaryGradient?: string) {
   const color = normalizeHexColor(primaryColor)
   const dark = '#0f172a'
@@ -92,6 +108,10 @@ export function getPalette(primaryColor?: string, primaryGradient?: string) {
     accent,
     accentStrong,
     accentFg,
+    // HSL strings for CSS variable injection (shadcn format: "H S% L%")
+    primaryHsl: hexToHslString(accent),
+    primaryForegroundHsl: hexToHslString(accentFg),
+    ringHsl: hexToHslString(accent),
   }
 }
 

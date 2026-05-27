@@ -229,99 +229,135 @@ function PauseBlock({ pause }: { pause: PauseData }) {
     }
   }
 
+  const selectedLabel = durations.find((d) => d.minutes === selectedMinutes)?.label ?? `${selectedMinutes} min`
+
   return (
     <>
       {status.is_paused ? (
-        <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                <Timer className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-amber-900">Loja Pausada</h3>
-                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                </div>
-                {status.remaining_text ? (
-                  <p className="text-sm text-amber-700">Retoma em {status.remaining_text}</p>
-                ) : status.pause_type === 'indefinite' ? (
-                  <p className="text-sm text-amber-700">Pausa indefinida — retome manualmente</p>
-                ) : null}
-                {status.pause_reason && (
-                  <p className="mt-0.5 text-xs text-amber-600">{status.pause_reason}</p>
-                )}
-              </div>
+        /* ── Paused state ── */
+        <section className="overflow-hidden rounded-2xl shadow-sm">
+          {/* amber gradient strip */}
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-white" />
+              </span>
+              <span className="text-xs font-bold uppercase tracking-widest text-white/90">
+                Loja pausada
+              </span>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2">
               {status.pause_type !== 'indefinite' && (
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="border-amber-400 text-amber-800 hover:bg-amber-100"
+                  className="h-7 border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white"
                   onClick={openExtend}
                   disabled={loading}
                 >
-                  <Timer className="mr-1.5 h-3.5 w-3.5" />
+                  <Timer className="mr-1 h-3 w-3" />
                   Estender
                 </Button>
               )}
               <Button
                 type="button"
                 size="sm"
-                className="bg-emerald-600 text-white hover:bg-emerald-700"
+                className="h-7 bg-white text-amber-700 hover:bg-white/90"
                 onClick={handleDisable}
                 disabled={loading}
               >
-                <Play className="mr-1.5 h-3.5 w-3.5" />
+                <Play className="mr-1 h-3 w-3" />
                 Retomar agora
               </Button>
             </div>
           </div>
-        </section>
-      ) : (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-                <Pause className="h-5 w-5" />
+
+          {/* body */}
+          <div className="border border-t-0 border-amber-200 rounded-b-2xl bg-amber-50 px-5 py-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 ring-1 ring-amber-200">
+                <Timer className="h-4 w-4 text-amber-700" />
               </div>
-              <div>
-                <h3 className="font-semibold text-slate-900">Pausa Programada</h3>
-                <p className="text-sm text-slate-600">Pause temporariamente o recebimento de pedidos</p>
+              <div className="min-w-0 flex-1">
+                {status.remaining_text ? (
+                  <p className="text-sm font-semibold text-amber-900">
+                    Retoma automaticamente em <span className="text-amber-700">{status.remaining_text}</span>
+                  </p>
+                ) : status.pause_type === 'indefinite' ? (
+                  <p className="text-sm font-semibold text-amber-900">
+                    Pausa indefinida — retome manualmente quando estiver pronto
+                  </p>
+                ) : (
+                  <p className="text-sm font-semibold text-amber-900">Loja com pedidos pausados</p>
+                )}
+                {status.pause_reason && (
+                  <p className="mt-0.5 truncate text-xs text-amber-600">
+                    Motivo: {status.pause_reason}
+                  </p>
+                )}
               </div>
             </div>
-            <Button
-              type="button"
-              className="bg-amber-600 text-white hover:bg-amber-700"
-              onClick={openPause}
-            >
-              Pausar Loja
-            </Button>
+          </div>
+        </section>
+      ) : (
+        /* ── Idle state ── */
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-stretch">
+            {/* left accent */}
+            <div className="w-1 shrink-0 bg-gradient-to-b from-amber-400 to-orange-500" />
+
+            <div className="flex flex-1 flex-wrap items-center justify-between gap-4 px-5 py-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 ring-1 ring-amber-200">
+                  <Pause className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800">Pausar loja</h3>
+                  <p className="text-sm text-slate-500">
+                    Interrompa pedidos por tempo determinado — iFood incluso
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                className="shrink-0 bg-amber-600 text-white shadow-sm hover:bg-amber-700 gap-1.5"
+                onClick={openPause}
+              >
+                <Pause className="h-3.5 w-3.5" />
+                Pausar agora
+              </Button>
+            </div>
           </div>
         </section>
       )}
 
-      {/* Modal */}
+      {/* ── Modal ── */}
       <AlertDialog open={modalOpen} onOpenChange={setModalOpen}>
-        <AlertDialogContent className="max-w-sm rounded-2xl p-6">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              {extendMode ? (
-                <><Timer className="h-4 w-4 text-amber-600" /> Estender pausa</>
-              ) : (
-                <><Pause className="h-4 w-4 text-amber-600" /> Pausar loja</>
-              )}
+        <AlertDialogContent className="max-w-[360px] gap-0 overflow-hidden rounded-2xl p-0">
+          {/* Header strip */}
+          <div className="flex flex-col items-center gap-2 bg-gradient-to-br from-amber-500 to-orange-500 px-6 py-5 text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 ring-1 ring-white/30">
+              {extendMode
+                ? <Timer className="h-6 w-6" />
+                : <Pause className="h-6 w-6" />}
+            </div>
+            <AlertDialogTitle className="text-base font-semibold text-white">
+              {extendMode ? 'Estender pausa' : 'Pausar loja'}
             </AlertDialogTitle>
-          </AlertDialogHeader>
-
-          {/* Duration chips */}
-          <div className="space-y-3">
-            <p className="text-sm font-medium text-slate-700">
-              {extendMode ? 'Estender por quanto tempo?' : 'Pausar por quanto tempo?'}
+            <p className="text-center text-xs text-white/80">
+              {extendMode
+                ? 'Quanto tempo a mais deseja pausar?'
+                : 'Por quanto tempo parar de receber pedidos?'}
             </p>
-            <div className="flex flex-wrap gap-2">
+          </div>
+
+          {/* Body */}
+          <div className="space-y-4 px-6 py-5">
+            {/* Duration grid */}
+            <div className="grid grid-cols-3 gap-2">
               {durations.map((d) => (
                 <button
                   key={d.minutes}
@@ -329,11 +365,11 @@ function PauseBlock({ pause }: { pause: PauseData }) {
                   disabled={indefinite}
                   onClick={() => setSelectedMinutes(d.minutes)}
                   className={[
-                    'rounded-lg border px-3 py-1.5 text-sm font-medium transition',
+                    'rounded-xl border py-2 text-center text-sm font-medium transition-all',
                     selectedMinutes === d.minutes && !indefinite
-                      ? 'border-amber-500 bg-amber-50 text-amber-800'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300',
-                    indefinite ? 'opacity-40 cursor-not-allowed' : '',
+                      ? 'border-amber-500 bg-amber-50 text-amber-800 shadow-sm ring-1 ring-amber-300'
+                      : 'border-slate-200 text-slate-600 hover:border-amber-300 hover:bg-amber-50/50',
+                    indefinite ? 'pointer-events-none opacity-35' : '',
                   ].join(' ')}
                 >
                   {d.label}
@@ -342,46 +378,54 @@ function PauseBlock({ pause }: { pause: PauseData }) {
             </div>
 
             {!extendMode && (
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-amber-600"
-                  checked={indefinite}
-                  onChange={(e) => setIndefinite(e.target.checked)}
-                />
-                Pausa indefinida (retomar manualmente)
-              </label>
-            )}
+              <>
+                {/* Indefinite toggle */}
+                <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5 transition hover:bg-slate-50">
+                  <div className="flex items-center gap-2.5 text-sm text-slate-700">
+                    <Timer className="h-4 w-4 text-slate-400" />
+                    Pausa indefinida
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-amber-600"
+                    checked={indefinite}
+                    onChange={(e) => setIndefinite(e.target.checked)}
+                  />
+                </label>
 
-            {!extendMode && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-500">Motivo (opcional)</label>
-                <input
-                  type="text"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Ex: Muita demanda, aguarde..."
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
-                />
-              </div>
+                {/* Reason */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-500">Motivo (opcional)</label>
+                  <input
+                    type="text"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Ex: Muito movimento, aguarde…"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  />
+                </div>
+              </>
             )}
           </div>
 
-          <AlertDialogFooter className="mt-2">
-            <AlertDialogCancel disabled={loading}>Cancelar</AlertDialogCancel>
+          {/* Footer */}
+          <AlertDialogFooter className="flex gap-2 border-t border-slate-100 px-6 py-4">
+            <AlertDialogCancel disabled={loading} className="flex-1">
+              Cancelar
+            </AlertDialogCancel>
             <Button
               type="button"
-              className="bg-amber-600 text-white hover:bg-amber-700"
+              className="flex-1 bg-amber-600 text-white hover:bg-amber-700"
               disabled={loading}
               onClick={extendMode ? handleExtend : handleEnable}
             >
               {loading
                 ? 'Salvando…'
                 : extendMode
-                ? `Estender ${selectedMinutes} min`
+                ? `+ ${selectedLabel}`
                 : indefinite
-                ? 'Pausar indefinidamente'
-                : `Pausar por ${durations.find((d) => d.minutes === selectedMinutes)?.label ?? selectedMinutes + ' min'}`}
+                ? 'Pausar'
+                : `Pausar ${selectedLabel}`}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

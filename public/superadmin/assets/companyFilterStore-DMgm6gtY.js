@@ -1,1 +1,0 @@
-import{b1 as t,b2 as o,b3 as l}from"./index-fiOFQjTa.js";const r=t()(o(e=>({selectedCompanyId:null,setSelectedCompanyId:a=>e({selectedCompanyId:a}),clearSelectedCompanyId:()=>e({selectedCompanyId:null})}),{name:"super-admin-company-filter",storage:l(()=>localStorage),partialize:e=>({selectedCompanyId:e.selectedCompanyId})}));export{r as u};

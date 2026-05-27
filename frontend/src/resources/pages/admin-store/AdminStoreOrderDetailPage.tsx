@@ -206,7 +206,10 @@ const STATUS_OPTIONS: Array<[string, string]> = [
 ]
 
 const STATUS_LABEL_MAP: Record<string, string> = {
-  pending: 'Novo', paid: 'Saiu para entrega', completed: 'Concluído', canceled: 'Cancelado',
+  pending: 'Novo',
+  paid: 'Saiu para entrega',
+  completed: 'Concluído',
+  canceled: 'Cancelado',
 }
 
 function statusPillClass(status: string) {
@@ -454,7 +457,6 @@ export default function AdminStoreOrderDetailPage() {
         icon={<ShoppingBag className="h-5 w-5" style={{ color: ctx.palette.primaryColor }} />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Status pill */}
             <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${statusPillClass(currentStatus)}`}>
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
               {statusLabel}
@@ -641,7 +643,6 @@ function OrderItemRow({ item }: { item: OrderItem }) {
 
   return (
     <div className="p-4 transition-colors hover:bg-slate-50/60">
-      {/* Main row */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center justify-center rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
@@ -661,7 +662,6 @@ function OrderItemRow({ item }: { item: OrderItem }) {
         </div>
       </div>
 
-      {/* Combo options */}
       {comboLines.length > 0 && (
         <div className="mt-3 pl-10">
           <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -686,7 +686,6 @@ function OrderItemRow({ item }: { item: OrderItem }) {
         </div>
       )}
 
-      {/* Customizations */}
       {customLines.length > 0 && (
         <div className="mt-3 pl-10">
           <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -703,7 +702,6 @@ function OrderItemRow({ item }: { item: OrderItem }) {
         </div>
       )}
 
-      {/* Item notes */}
       {showItemNotes && (
         <div className="mt-3 pl-10">
           <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Observações</div>

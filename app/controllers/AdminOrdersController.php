@@ -347,7 +347,8 @@ class AdminOrdersController extends Controller
             'ifood'          => $ifoodPayload,
             'events'         => $orderEvents,
             'status_labels'  => [
-                'pending'   => 'Pendente',
+                'pending'   => 'Aguardando',
+                'paid'      => 'Confirmado',
                 'completed' => 'Concluído',
                 'canceled'  => 'Cancelado',
             ],

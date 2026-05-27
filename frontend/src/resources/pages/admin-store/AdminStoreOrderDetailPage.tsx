@@ -1,21 +1,25 @@
 import { useMemo, useState } from 'react'
 import {
   ArrowLeft,
+  Bike,
   CheckCheck,
+  CheckCircle2,
   ClipboardList,
   Clock,
   CreditCard,
   Edit3,
+  Globe,
   History,
   MapPin,
   MessageSquare,
+  Package,
   Printer,
   ShoppingBag,
   ShoppingCart,
   Smartphone,
-  Store,
   Trash2,
   Utensils,
+  XCircle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -201,11 +205,104 @@ declare global {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const STATUS_PILL: Record<string, string> = {
-  pending:   'bg-amber-100 text-amber-700 border-amber-200',
-  completed: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  canceled:  'bg-red-100 text-red-700 border-red-200',
-  paid:      'bg-blue-100 text-blue-700 border-blue-200',
+const STATUS_RANK: Record<string, number> = {
+  pending: 0,
+  paid: 1, confirmed: 1,
+  ready: 2,
+  dispatched: 3,
+  completed: 4, concluded: 4,
+  canceled: -1, cancelled: -1,
+}
+
+type TimelineStep = {
+  key: string
+  normKeys: string[]  // all DB/iFood values that map to this step
+  label: string
+  Icon: typeof Clock
+  activeColor: string
+  activeBg: string
+  activeBorder: string
+  activeText: string
+}
+
+const REGULAR_STEPS: TimelineStep[] = [
+  { key: 'pending',   normKeys: ['pending'],          label: 'Aguardando', Icon: Clock,          activeColor: 'bg-amber-500',   activeBg: 'bg-amber-50',   activeBorder: 'border-amber-200', activeText: 'text-amber-700' },
+  { key: 'paid',      normKeys: ['paid','confirmed'],  label: 'Confirmado', Icon: CheckCircle2,   activeColor: 'bg-blue-500',    activeBg: 'bg-blue-50',    activeBorder: 'border-blue-200',  activeText: 'text-blue-700' },
+  { key: 'completed', normKeys: ['completed'],         label: 'Concluído',  Icon: CheckCheck,     activeColor: 'bg-emerald-500', activeBg: 'bg-emerald-50', activeBorder: 'border-emerald-200', activeText: 'text-emerald-700' },
+]
+
+const IFOOD_STEPS: TimelineStep[] = [
+  { key: 'pending',    normKeys: ['pending'],              label: 'Aguardando', Icon: Clock,        activeColor: 'bg-amber-500',   activeBg: 'bg-amber-50',   activeBorder: 'border-amber-200',   activeText: 'text-amber-700'  },
+  { key: 'confirmed',  normKeys: ['confirmed','paid'],      label: 'Confirmado', Icon: CheckCircle2, activeColor: 'bg-blue-500',    activeBg: 'bg-blue-50',    activeBorder: 'border-blue-200',    activeText: 'text-blue-700'   },
+  { key: 'ready',      normKeys: ['ready'],                 label: 'Pronto',     Icon: Package,      activeColor: 'bg-indigo-500',  activeBg: 'bg-indigo-50',  activeBorder: 'border-indigo-200',  activeText: 'text-indigo-700' },
+  { key: 'dispatched', normKeys: ['dispatched'],            label: 'Em Entrega', Icon: Bike,         activeColor: 'bg-purple-500',  activeBg: 'bg-purple-50',  activeBorder: 'border-purple-200',  activeText: 'text-purple-700' },
+  { key: 'completed',  normKeys: ['completed','concluded'], label: 'Concluído',  Icon: CheckCheck,   activeColor: 'bg-emerald-500', activeBg: 'bg-emerald-50', activeBorder: 'border-emerald-200', activeText: 'text-emerald-700'},
+]
+
+function StatusTimeline({ status, isIfood }: { status: string; isIfood: boolean }) {
+  const steps = isIfood ? IFOOD_STEPS : REGULAR_STEPS
+  const rank = STATUS_RANK[status] ?? 0
+  const isCanceled = status === 'canceled' || status === 'cancelled'
+
+  if (isCanceled) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white shadow-sm">
+            <XCircle className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-red-700">Pedido Cancelado</p>
+            <p className="text-xs text-red-500">Este pedido foi cancelado</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Progresso do Pedido</p>
+      <div className="flex items-start">
+        {steps.map((step, i) => {
+          const stepRank = STATUS_RANK[step.key] ?? 0
+          const done    = rank > stepRank
+          const current = rank === stepRank
+          const active  = done || current
+          const Icon    = step.Icon
+
+          return (
+            <div key={step.key} className="flex flex-1 flex-col items-center">
+              {/* connector line + circle row */}
+              <div className="flex w-full items-center">
+                {/* left line */}
+                <div className={`h-0.5 flex-1 transition-colors ${i === 0 ? 'invisible' : done || current ? step.activeColor : 'bg-zinc-200'}`} />
+                {/* circle */}
+                <div className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                  done    ? `${step.activeColor} border-transparent text-white shadow-sm` :
+                  current ? `${step.activeBg} ${step.activeBorder} ${step.activeText} shadow-md ring-4 ring-offset-1 ${step.activeBorder.replace('border-', 'ring-')}` :
+                            'border-zinc-200 bg-white text-zinc-300'
+                }`}>
+                  <Icon className="h-4 w-4" />
+                  {current && (
+                    <span className={`absolute inset-0 animate-ping rounded-full opacity-30 ${step.activeBg}`} />
+                  )}
+                </div>
+                {/* right line */}
+                <div className={`h-0.5 flex-1 transition-colors ${i === steps.length - 1 ? 'invisible' : done ? step.activeColor : 'bg-zinc-200'}`} />
+              </div>
+              {/* label */}
+              <p className={`mt-2 text-center text-[11px] font-medium leading-tight ${
+                active ? step.activeText : 'text-zinc-300'
+              }`}>
+                {step.label}
+              </p>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function formatDateBr(s: string | null | undefined): string {
@@ -369,7 +466,7 @@ function SourceBadge({ source }: { source: string }) {
   )
   if (s === 'website') return (
     <Badge className="gap-1.5 border-transparent bg-blue-100 text-blue-700 hover:bg-blue-100">
-      <Store className="h-3 w-3" />Site
+      <Globe className="h-3 w-3" />Site
     </Badge>
   )
   if (s === 'whatsapp') return (
@@ -384,16 +481,6 @@ function SourceBadge({ source }: { source: string }) {
   )
 }
 
-function StatusPill({ status, label }: { status: string; label: string }) {
-  const cls = STATUS_PILL[status] ?? 'bg-zinc-100 text-zinc-700 border-zinc-200'
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${cls}`}>
-      <Clock className="h-3 w-3" />
-      {label}
-    </span>
-  )
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function AdminStoreOrderDetailPage() {
@@ -405,7 +492,6 @@ export default function AdminStoreOrderDetailPage() {
   const urls = payload.urls
   const statusLabels = payload.status_labels ?? {}
 
-  const [statusValue, setStatusValue] = useState<string>(order?.status ?? 'pending')
   const [busy, setBusy] = useState<string | null>(null)
 
   const orderNumber = order?.order_number ?? order?.id ?? 0
@@ -436,14 +522,12 @@ export default function AdminStoreOrderDetailPage() {
     )
   }
 
-  async function applyStatus(e: React.FormEvent) {
-    e.preventDefault()
-    if (statusValue === order.status) return
+  async function applyStatusDirect(newStatus: string) {
     setBusy('status')
     try {
       const fd = new FormData()
       fd.set('id', String(order.id))
-      fd.set('status', statusValue)
+      fd.set('status', newStatus)
       fd.set('csrf_token', getCsrfToken())
       const res = await fetch(urls.set_status, {
         method: 'POST',
@@ -535,9 +619,11 @@ export default function AdminStoreOrderDetailPage() {
         }
       />
 
+      {/* Status timeline */}
+      <StatusTimeline status={order.status} isIfood={isIFood} />
+
       {/* Meta row */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <StatusPill status={order.status} label={statusLabel} />
         <SourceBadge source={order.source} />
         {order.created_at && (
           <span className="ml-auto text-xs text-zinc-500">
@@ -615,22 +701,46 @@ export default function AdminStoreOrderDetailPage() {
             </div>
           )}
 
-          <form onSubmit={applyStatus} className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-3">
-            <label className="text-xs font-medium text-zinc-600">Atualizar status:</label>
-            <select
-              value={statusValue}
-              onChange={(e) => setStatusValue(e.target.value)}
-              className="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            >
-              {Object.entries(statusLabels).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-            <Button type="submit" variant="outline" size="sm" disabled={busy === 'status'} className="gap-1.5">
-              <CheckCheck className="h-4 w-4" />
-              Aplicar
-            </Button>
-          </form>
+          {!isIFood && order.status !== 'completed' && order.status !== 'canceled' && (
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-zinc-100 pt-3">
+              <p className="w-full text-xs font-medium text-zinc-500">Avançar status:</p>
+              {order.status === 'pending' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={busy === 'status'}
+                  onClick={() => applyStatusDirect('paid')}
+                  className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white border-0"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Confirmar pedido
+                </Button>
+              )}
+              {order.status === 'paid' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={busy === 'status'}
+                  onClick={() => applyStatusDirect('completed')}
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+                  Marcar como concluído
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy === 'status'}
+                onClick={() => applyStatusDirect('canceled')}
+                className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+                Cancelar pedido
+              </Button>
+            </div>
+          )}
         </section>
       </div>
 

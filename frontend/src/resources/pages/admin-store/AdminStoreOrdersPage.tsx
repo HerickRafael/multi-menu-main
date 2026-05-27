@@ -122,28 +122,6 @@ const STATUS_RANK: Record<string, number> = {
   canceled: -1, cancelled: -1,
 }
 
-type StatusMeta = { label: string; cls: string; dot: string; icon: typeof Clock }
-const STATUS_META: Record<string, StatusMeta> = {
-  pending:    { label: 'Aguardando', cls: 'bg-amber-50 text-amber-700 border-amber-200',    dot: 'bg-amber-400',   icon: Clock },
-  confirmed:  { label: 'Confirmado', cls: 'bg-blue-50 text-blue-700 border-blue-200',       dot: 'bg-blue-500',    icon: CheckCircle2 },
-  ready:      { label: 'Pronto',     cls: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500',  icon: Package },
-  dispatched: { label: 'Em Entrega', cls: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500',  icon: Bike },
-  completed:  { label: 'Concluído',  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: CheckCheck },
-  canceled:   { label: 'Cancelado',  cls: 'bg-red-50 text-red-700 border-red-200',          dot: 'bg-red-400',     icon: XCircle },
-  paid:       { label: 'Confirmado', cls: 'bg-blue-50 text-blue-700 border-blue-200',       dot: 'bg-blue-500',    icon: CheckCircle2 },
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const meta = STATUS_META[status] ?? { label: status, cls: 'bg-zinc-100 text-zinc-600 border-zinc-200', dot: 'bg-zinc-400', icon: Clock }
-  const Icon = meta.icon
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.cls}`}>
-      <Icon className="h-3 w-3 shrink-0" />
-      {meta.label}
-    </span>
-  )
-}
-
 // ── Status pipeline (Origem column) ──────────────────────────────────────────
 
 type PipelineStep = {
@@ -514,11 +492,6 @@ export default function AdminStoreOrdersPage() {
           )}
         </div>
       ),
-    },
-    {
-      header: 'Status',
-      key: 'status',
-      cell: (o) => <StatusBadge status={o.status} />,
     },
     {
       header: 'Valor',

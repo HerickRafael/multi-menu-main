@@ -26,34 +26,14 @@ class AdminOrdersController extends Controller
     {
         $db = $this->db();
 
-        // Mapeamento de status UI → status iFood
-        $ifoodStatusMap = [
-            'pending'    => 'PLACED',
-            'confirmed'  => 'CONFIRMED',
-            'ready'      => 'READY_TO_PICKUP',
-            'dispatched' => 'DISPATCHED',
-            'completed'  => 'CONCLUDED',
-            'canceled'   => 'CANCELLED',
-        ];
-
-        // Mapeamento de status iFood → status UI normalizado
+        // Simplified iFood status normalization
         $ifoodNormalizeMap = [
             'PLACED'          => 'pending',
-            'CONFIRMED'       => 'confirmed',
-            'READY_TO_PICKUP' => 'ready',
-            'DISPATCHED'      => 'dispatched',
+            'CONFIRMED'       => 'paid',
+            'READY_TO_PICKUP' => 'paid',
+            'DISPATCHED'      => 'paid',
             'CONCLUDED'       => 'completed',
             'CANCELLED'       => 'canceled',
-        ];
-
-        // Mapeamento de status UI → DB status para pedidos regulares
-        $regularStatusMap = [
-            'pending'    => 'pending',
-            'confirmed'  => 'paid',
-            'ready'      => 'paid',
-            'dispatched' => 'paid',
-            'completed'  => 'completed',
-            'canceled'   => 'canceled',
         ];
 
         $includeRegular = $source !== 'ifood';
@@ -63,9 +43,8 @@ class AdminOrdersController extends Controller
 
         // ── Pedidos regulares ────────────────────────────────────────────────
         if ($includeRegular) {
-            $dbStatus = $status !== null ? ($regularStatusMap[$status] ?? $status) : null;
             $result = OrderListService::listForCompany($db, $companyId, [
-                'status'         => $dbStatus,
+                'status'         => null, // fetch all, filter below
                 'source'         => $source,
                 'exclude_source' => ($includeIfood && $source === null) ? 'ifood' : null,
                 'search'         => $search,
@@ -74,6 +53,12 @@ class AdminOrdersController extends Controller
             ]);
             foreach ($result['orders'] as $o) {
                 $rawStatus = (string)($o['status'] ?? 'pending');
+
+                // "pending" tab = active orders (pending + paid)
+                if ($status === 'pending' && !in_array($rawStatus, ['pending', 'paid'], true)) continue;
+                if ($status === 'completed' && $rawStatus !== 'completed') continue;
+                if ($status === 'canceled' && $rawStatus !== 'canceled') continue;
+
                 $allOrders[] = [
                     'id'             => (int)($o['id'] ?? 0),
                     'display_id'     => '#' . ($o['order_number'] ?? $o['id'] ?? 0),
@@ -96,12 +81,16 @@ class AdminOrdersController extends Controller
 
         // ── Pedidos iFood ────────────────────────────────────────────────────
         if ($includeIfood) {
-            $ifoodStatus = $status !== null ? ($ifoodStatusMap[$status] ?? null) : null;
             $ifoodService = new IFoodService($db, $companyId);
-            $ifoodRaw = $ifoodService->getOrders($ifoodStatus, 200);
+            $ifoodRaw = $ifoodService->getOrders(null, 200); // fetch all, filter below
             foreach ($ifoodRaw as $o) {
                 $rawIfoodStatus = (string)($o['status'] ?? 'PLACED');
                 $normalizedStatus = $ifoodNormalizeMap[$rawIfoodStatus] ?? 'pending';
+
+                // Apply filter
+                if ($status !== null && $status !== $normalizedStatus) continue;
+                // For "pending" tab, include all active (pending + paid)
+                if ($status === 'pending' && !in_array($normalizedStatus, ['pending', 'paid'], true)) continue;
 
                 if ($search !== null) {
                     $haystack = strtolower(
@@ -109,9 +98,7 @@ class AdminOrdersController extends Controller
                         ($o['customer_name'] ?? '') . ' ' .
                         ($o['customer_phone'] ?? '')
                     );
-                    if (!str_contains($haystack, strtolower($search))) {
-                        continue;
-                    }
+                    if (!str_contains($haystack, strtolower($search))) continue;
                 }
 
                 $allOrders[] = [
@@ -180,12 +167,10 @@ class AdminOrdersController extends Controller
                 'current_status' => $status,
                 'current_source' => $source,
                 'status_labels'  => [
-                    'pending'    => 'Novo',
-                    'confirmed'  => 'Confirmado',
-                    'ready'      => 'Pronto',
-                    'dispatched' => 'Em Entrega',
-                    'completed'  => 'Concluído',
-                    'canceled'   => 'Cancelado',
+                    'pending'   => 'Novo',
+                    'paid'      => 'Saiu para entrega',
+                    'completed' => 'Concluído',
+                    'canceled'  => 'Cancelado',
                 ],
                 'urls' => [
                     'list'              => '/admin/' . rawurlencode($slug) . '/orders',
@@ -347,8 +332,8 @@ class AdminOrdersController extends Controller
             'ifood'          => $ifoodPayload,
             'events'         => $orderEvents,
             'status_labels'  => [
-                'pending'   => 'Aguardando',
-                'paid'      => 'Confirmado',
+                'pending'   => 'Novo',
+                'paid'      => 'Saiu para entrega',
                 'completed' => 'Concluído',
                 'canceled'  => 'Cancelado',
             ],

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Bike,
   CheckCheck,
   CheckCircle2,
   ClipboardList,
@@ -95,12 +94,9 @@ declare global {
 // ── Status tabs ───────────────────────────────────────────────────────────────
 
 const STATUS_TABS: Array<{ value: string; label: string; tone: string }> = [
-  { value: 'pending',    label: 'Novo',       tone: 'bg-amber-100 text-amber-700 border-amber-200' },
-  { value: 'confirmed',  label: 'Confirmado', tone: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { value: 'ready',      label: 'Pronto',     tone: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
-  { value: 'dispatched', label: 'Em Entrega', tone: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { value: 'completed',  label: 'Concluído',  tone: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  { value: 'canceled',   label: 'Cancelado',  tone: 'bg-red-100 text-red-700 border-red-200' },
+  { value: 'pending',   label: 'Novo',      tone: 'bg-amber-100 text-amber-700 border-amber-200' },
+  { value: 'completed', label: 'Concluído', tone: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  { value: 'canceled',  label: 'Cancelado', tone: 'bg-red-100 text-red-700 border-red-200' },
 ]
 
 const SOURCE_TABS: Array<{ value: string | null; label: string }> = [
@@ -112,86 +108,26 @@ const SOURCE_TABS: Array<{ value: string | null; label: string }> = [
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
-// Normalized order: maps every possible DB/iFood value to a canonical key
-const STATUS_RANK: Record<string, number> = {
-  pending: 0, placed: 0,
-  paid: 1, confirmed: 1,
-  ready: 2,
-  dispatched: 3,
-  completed: 4, concluded: 4,
-  canceled: -1, cancelled: -1,
+const STATUS_DISPLAY: Record<string, { label: string; cls: string; icon: typeof Clock }> = {
+  pending:    { label: 'Novo',            cls: 'border-amber-200 bg-amber-50 text-amber-700',   icon: Clock },
+  paid:       { label: 'Saiu p/ entrega', cls: 'border-purple-200 bg-purple-50 text-purple-700', icon: Truck },
+  completed:  { label: 'Concluído',       cls: 'border-emerald-200 bg-emerald-50 text-emerald-700', icon: CheckCheck },
+  canceled:   { label: 'Cancelado',       cls: 'border-red-200 bg-red-50 text-red-600',         icon: XCircle },
+  // iFood intermediate → show as "Saiu p/ entrega" since they map to paid
+  confirmed:  { label: 'Saiu p/ entrega', cls: 'border-purple-200 bg-purple-50 text-purple-700', icon: Truck },
+  ready:      { label: 'Saiu p/ entrega', cls: 'border-purple-200 bg-purple-50 text-purple-700', icon: Truck },
+  dispatched: { label: 'Saiu p/ entrega', cls: 'border-purple-200 bg-purple-50 text-purple-700', icon: Truck },
+  completed_alt: { label: 'Concluído',   cls: 'border-emerald-200 bg-emerald-50 text-emerald-700', icon: CheckCheck },
 }
 
-// ── Status pipeline (Origem column) ──────────────────────────────────────────
-
-type PipelineStep = {
-  key: string
-  label: string
-  activeColor: string   // dot / line active color (Tailwind bg class)
-  activeText: string    // text active color (Tailwind text class)
-  inactiveColor: string // dot inactive
-}
-
-const PIPELINE_STEPS: PipelineStep[] = [
-  { key: 'confirmed', label: 'Confirmado', activeColor: 'bg-blue-500',    activeText: 'text-blue-600',   inactiveColor: 'bg-zinc-200' },
-  { key: 'ready',     label: 'Pronto',     activeColor: 'bg-indigo-500',  activeText: 'text-indigo-600', inactiveColor: 'bg-zinc-200' },
-  { key: 'dispatched',label: 'Em Entrega', activeColor: 'bg-purple-500',  activeText: 'text-purple-600', inactiveColor: 'bg-zinc-200' },
-]
-
-function StatusPipeline({ status }: { status: string }) {
-  const rank = STATUS_RANK[status] ?? 0
-
-  if (status === 'canceled' || status === 'cancelled') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
-        <XCircle className="h-3 w-3 shrink-0" />Cancelado
-      </span>
-    )
-  }
-  if (status === 'completed' || status === 'concluded') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-        <CheckCheck className="h-3 w-3 shrink-0" />Concluído
-      </span>
-    )
-  }
-  if (rank === 0) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-        <Clock className="h-3 w-3 shrink-0" />Aguardando
-      </span>
-    )
-  }
-
+function StatusBadge({ status }: { status: string }) {
+  const d = STATUS_DISPLAY[status] ?? { label: status, cls: 'border-zinc-200 bg-zinc-50 text-zinc-600', icon: Clock }
+  const Icon = d.icon
   return (
-    <div className="flex items-center gap-1">
-      {PIPELINE_STEPS.map((step, i) => {
-        const stepRank = STATUS_RANK[step.key] ?? 0
-        const done    = rank > stepRank
-        const current = rank === stepRank
-        const active  = done || current
-
-        return (
-          <div key={step.key} className="flex items-center gap-1">
-            {i > 0 && (
-              <div className={`h-px w-3 rounded-full transition-colors ${active ? step.activeColor : 'bg-zinc-200'}`} />
-            )}
-            <div className="flex flex-col items-center gap-0.5">
-              <div className={`h-2 w-2 rounded-full ring-2 ring-offset-1 transition-colors ${
-                done    ? `${step.activeColor} ring-transparent` :
-                current ? `${step.activeColor} ring-current` :
-                          `${step.inactiveColor} ring-transparent`
-              } ${current ? step.activeText : ''}`} />
-              <span className={`text-[9px] font-medium leading-none transition-colors ${
-                active ? step.activeText : 'text-zinc-300'
-              }`}>
-                {step.label}
-              </span>
-            </div>
-          </div>
-        )
-      })}
-    </div>
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${d.cls}`}>
+      <Icon className="h-3 w-3 shrink-0" />
+      {d.label}
+    </span>
   )
 }
 
@@ -501,9 +437,9 @@ export default function AdminStoreOrdersPage() {
       ),
     },
     {
-      header: 'Etapa',
+      header: 'Status',
       key: 'source',
-      cell: (o) => <StatusPipeline status={o.status} />,
+      cell: (o) => <StatusBadge status={o.status} />,
     },
     {
       header: 'Data',

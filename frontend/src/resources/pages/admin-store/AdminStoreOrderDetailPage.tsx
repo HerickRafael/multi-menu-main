@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   ArrowLeft,
-  Bike,
   CheckCheck,
-  CheckCircle2,
   ClipboardList,
   Clock,
   CreditCard,
@@ -13,12 +11,12 @@ import {
   Loader2,
   MapPin,
   MessageSquare,
-  Package,
   Printer,
   ShoppingBag,
   ShoppingCart,
   Smartphone,
   Trash2,
+  Truck,
   Utensils,
   XCircle,
 } from 'lucide-react'
@@ -208,16 +206,13 @@ declare global {
 
 const STATUS_RANK: Record<string, number> = {
   pending: 0,
-  paid: 1, confirmed: 1,
-  ready: 2,
-  dispatched: 3,
-  completed: 4, concluded: 4,
+  paid: 1, confirmed: 1, ready: 1, dispatched: 1,
+  completed: 2, concluded: 2,
   canceled: -1, cancelled: -1,
 }
 
 type TimelineStep = {
   key: string
-  normKeys: string[]  // all DB/iFood values that map to this step
   label: string
   Icon: typeof Clock
   activeColor: string
@@ -226,22 +221,13 @@ type TimelineStep = {
   activeText: string
 }
 
-const REGULAR_STEPS: TimelineStep[] = [
-  { key: 'pending',   normKeys: ['pending'],          label: 'Aguardando', Icon: Clock,          activeColor: 'bg-amber-500',   activeBg: 'bg-amber-50',   activeBorder: 'border-amber-200', activeText: 'text-amber-700' },
-  { key: 'paid',      normKeys: ['paid','confirmed'],  label: 'Confirmado', Icon: CheckCircle2,   activeColor: 'bg-blue-500',    activeBg: 'bg-blue-50',    activeBorder: 'border-blue-200',  activeText: 'text-blue-700' },
-  { key: 'completed', normKeys: ['completed'],         label: 'Concluído',  Icon: CheckCheck,     activeColor: 'bg-emerald-500', activeBg: 'bg-emerald-50', activeBorder: 'border-emerald-200', activeText: 'text-emerald-700' },
+const ORDER_STEPS: TimelineStep[] = [
+  { key: 'pending',   label: 'Novo',            Icon: Clock,        activeColor: 'bg-amber-500',   activeBg: 'bg-amber-50',   activeBorder: 'border-amber-200',   activeText: 'text-amber-700'   },
+  { key: 'paid',      label: 'Saiu para entrega',Icon: Truck,        activeColor: 'bg-purple-500',  activeBg: 'bg-purple-50',  activeBorder: 'border-purple-200',  activeText: 'text-purple-700'  },
+  { key: 'completed', label: 'Concluído',        Icon: CheckCheck,   activeColor: 'bg-emerald-500', activeBg: 'bg-emerald-50', activeBorder: 'border-emerald-200', activeText: 'text-emerald-700' },
 ]
 
-const IFOOD_STEPS: TimelineStep[] = [
-  { key: 'pending',    normKeys: ['pending'],              label: 'Aguardando', Icon: Clock,        activeColor: 'bg-amber-500',   activeBg: 'bg-amber-50',   activeBorder: 'border-amber-200',   activeText: 'text-amber-700'  },
-  { key: 'confirmed',  normKeys: ['confirmed','paid'],      label: 'Confirmado', Icon: CheckCircle2, activeColor: 'bg-blue-500',    activeBg: 'bg-blue-50',    activeBorder: 'border-blue-200',    activeText: 'text-blue-700'   },
-  { key: 'ready',      normKeys: ['ready'],                 label: 'Pronto',     Icon: Package,      activeColor: 'bg-indigo-500',  activeBg: 'bg-indigo-50',  activeBorder: 'border-indigo-200',  activeText: 'text-indigo-700' },
-  { key: 'dispatched', normKeys: ['dispatched'],            label: 'Em Entrega', Icon: Bike,         activeColor: 'bg-purple-500',  activeBg: 'bg-purple-50',  activeBorder: 'border-purple-200',  activeText: 'text-purple-700' },
-  { key: 'completed',  normKeys: ['completed','concluded'], label: 'Concluído',  Icon: CheckCheck,   activeColor: 'bg-emerald-500', activeBg: 'bg-emerald-50', activeBorder: 'border-emerald-200', activeText: 'text-emerald-700'},
-]
-
-function StatusTimeline({ status, isIfood }: { status: string; isIfood: boolean }) {
-  const steps = isIfood ? IFOOD_STEPS : REGULAR_STEPS
+function StatusTimeline({ status }: { status: string }) {
   const rank = STATUS_RANK[status] ?? 0
   const isCanceled = status === 'canceled' || status === 'cancelled'
 
@@ -265,7 +251,7 @@ function StatusTimeline({ status, isIfood }: { status: string; isIfood: boolean 
     <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
       <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Progresso do Pedido</p>
       <div className="flex items-start">
-        {steps.map((step, i) => {
+        {ORDER_STEPS.map((step, i) => {
           const stepRank = STATUS_RANK[step.key] ?? 0
           const done    = rank > stepRank
           const current = rank === stepRank
@@ -274,11 +260,8 @@ function StatusTimeline({ status, isIfood }: { status: string; isIfood: boolean 
 
           return (
             <div key={step.key} className="flex flex-1 flex-col items-center">
-              {/* connector line + circle row */}
               <div className="flex w-full items-center">
-                {/* left line */}
                 <div className={`h-0.5 flex-1 transition-colors ${i === 0 ? 'invisible' : done || current ? step.activeColor : 'bg-zinc-200'}`} />
-                {/* circle */}
                 <div className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
                   done    ? `${step.activeColor} border-transparent text-white shadow-sm` :
                   current ? `${step.activeBg} ${step.activeBorder} ${step.activeText} shadow-md ring-4 ring-offset-1 ${step.activeBorder.replace('border-', 'ring-')}` :
@@ -286,16 +269,12 @@ function StatusTimeline({ status, isIfood }: { status: string; isIfood: boolean 
                 }`}>
                   <Icon className="h-4 w-4" />
                   {current && (
-                    <span className={`absolute inset-0 animate-ping rounded-full opacity-30 ${step.activeBg}`} />
+                    <span className={`absolute inset-0 animate-ping rounded-full opacity-20 ${step.activeBg}`} />
                   )}
                 </div>
-                {/* right line */}
-                <div className={`h-0.5 flex-1 transition-colors ${i === steps.length - 1 ? 'invisible' : done ? step.activeColor : 'bg-zinc-200'}`} />
+                <div className={`h-0.5 flex-1 transition-colors ${i === ORDER_STEPS.length - 1 ? 'invisible' : done ? step.activeColor : 'bg-zinc-200'}`} />
               </div>
-              {/* label */}
-              <p className={`mt-2 text-center text-[11px] font-medium leading-tight ${
-                active ? step.activeText : 'text-zinc-300'
-              }`}>
+              <p className={`mt-2 text-center text-[11px] font-medium leading-tight ${active ? step.activeText : 'text-zinc-300'}`}>
                 {step.label}
               </p>
             </div>
@@ -500,7 +479,10 @@ export default function AdminStoreOrderDetailPage() {
   const isIFood = (order?.source ?? '') === 'ifood'
   const canEdit = order?.status === 'pending' && !isIFood
   const totalDiscount = (order?.discount ?? 0) + (order?.loyalty_discount ?? 0)
-  const statusLabel = statusLabels[order?.status ?? ''] ?? (order?.status ?? '')
+  const STATUS_LABEL_MAP: Record<string, string> = {
+    pending: 'Novo', paid: 'Saiu para entrega', completed: 'Concluído', canceled: 'Cancelado',
+  }
+  const statusLabel = statusLabels[order?.status ?? ''] ?? STATUS_LABEL_MAP[order?.status ?? ''] ?? (order?.status ?? '')
 
   const { userNotes, displayInstructions } = useMemo(() => {
     return parseUserNotesAndInstructions(order?.notes ?? '', payload.payment?.instructions ?? null)
@@ -627,7 +609,7 @@ export default function AdminStoreOrderDetailPage() {
       />
 
       {/* Status timeline */}
-      <StatusTimeline status={currentStatus} isIfood={isIFood} />
+      <StatusTimeline status={currentStatus} />
 
       {/* Meta row */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -708,24 +690,24 @@ export default function AdminStoreOrderDetailPage() {
             </div>
           )}
 
-          {!isIFood && currentStatus !== 'completed' && currentStatus !== 'canceled' && (
+          {currentStatus !== 'completed' && currentStatus !== 'canceled' && (
             <div className="mt-3 border-t border-zinc-100 pt-3 space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Ações do pedido</p>
               <div className="flex flex-wrap gap-2">
-                {currentStatus === 'pending' && (
+                {currentStatus === 'pending' && !isIFood && (
                   <button
                     type="button"
                     disabled={busy !== null}
                     onClick={() => applyStatusDirect('paid')}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-purple-700 disabled:opacity-60"
                   >
                     {busy === 'paid'
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <CheckCircle2 className="h-3.5 w-3.5" />}
-                    {busy === 'paid' ? 'Confirmando…' : 'Confirmar pedido'}
+                      : <Truck className="h-3.5 w-3.5" />}
+                    {busy === 'paid' ? 'Registrando…' : 'Saiu para entrega'}
                   </button>
                 )}
-                {currentStatus === 'paid' && (
+                {!isIFood && (
                   <button
                     type="button"
                     disabled={busy !== null}
@@ -735,20 +717,22 @@ export default function AdminStoreOrderDetailPage() {
                     {busy === 'completed'
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       : <CheckCheck className="h-3.5 w-3.5" />}
-                    {busy === 'completed' ? 'Concluindo…' : 'Marcar como concluído'}
+                    {busy === 'completed' ? 'Concluindo…' : 'Concluído'}
                   </button>
                 )}
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => applyStatusDirect('canceled')}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm transition hover:bg-red-50 disabled:opacity-60"
-                >
-                  {busy === 'canceled'
-                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    : <XCircle className="h-3.5 w-3.5" />}
-                  {busy === 'canceled' ? 'Cancelando…' : 'Cancelar pedido'}
-                </button>
+                {!isIFood && (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => applyStatusDirect('canceled')}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm transition hover:bg-red-50 disabled:opacity-60"
+                  >
+                    {busy === 'canceled'
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <XCircle className="h-3.5 w-3.5" />}
+                    {busy === 'canceled' ? 'Cancelando…' : 'Cancelar pedido'}
+                  </button>
+                )}
               </div>
             </div>
           )}

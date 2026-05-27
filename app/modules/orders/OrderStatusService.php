@@ -11,7 +11,7 @@ class OrderStatusService
      */
     public static function acceptedInputStatuses(): array
     {
-        return ['pending', 'paid', 'completed', 'canceled', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
+        return ['pending', 'paid', 'completed', 'canceled', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled'];
     }
 
     /**
@@ -22,11 +22,12 @@ class OrderStatusService
         $normalized = strtolower(trim($status));
 
         $map = [
-            'confirmed' => 'paid',
-            'preparing' => 'paid',
-            'ready' => 'paid',
-            'delivered' => 'completed',
-            'cancelled' => 'canceled',
+            'confirmed'  => 'paid',
+            'preparing'  => 'paid',
+            'ready'      => 'paid',
+            'dispatched' => 'paid',
+            'delivered'  => 'completed',
+            'cancelled'  => 'canceled',
         ];
 
         return $map[$normalized] ?? $normalized;

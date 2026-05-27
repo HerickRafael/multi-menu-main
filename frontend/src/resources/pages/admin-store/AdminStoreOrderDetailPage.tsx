@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
-  ArrowLeft,
-  CheckCheck,
+  Check,
   ClipboardList,
-  Clock,
   CreditCard,
   Edit3,
   Globe,
@@ -16,9 +14,7 @@ import {
   ShoppingCart,
   Smartphone,
   Trash2,
-  Truck,
   Utensils,
-  XCircle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -56,9 +52,7 @@ type CustomItem = {
 }
 
 type ComponentCustomizationUnit = {
-  groups?: Array<{
-    items?: CustomItem[]
-  }>
+  groups?: Array<{ items?: CustomItem[] }>
 }
 
 type ComponentCustomization = {
@@ -204,103 +198,35 @@ declare global {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const STATUS_RANK: Record<string, number> = {
-  pending: 0,
-  paid: 1, confirmed: 1, ready: 1, dispatched: 1,
-  completed: 2, concluded: 2,
-  canceled: -1, cancelled: -1,
-}
-
-type TimelineStep = {
-  key: string
-  label: string
-  Icon: typeof Clock
-  activeColor: string
-  activeBg: string
-  activeBorder: string
-  activeText: string
-}
-
-const ORDER_STEPS: TimelineStep[] = [
-  { key: 'pending',   label: 'Novo',             Icon: Clock,      activeColor: 'bg-amber-500',   activeBg: 'bg-amber-50',   activeBorder: 'border-amber-200',   activeText: 'text-amber-700'   },
-  { key: 'paid',      label: 'Saiu para entrega', Icon: Truck,      activeColor: 'bg-purple-500',  activeBg: 'bg-purple-50',  activeBorder: 'border-purple-200',  activeText: 'text-purple-700'  },
-  { key: 'completed', label: 'Concluído',          Icon: CheckCheck, activeColor: 'bg-emerald-500', activeBg: 'bg-emerald-50', activeBorder: 'border-emerald-200', activeText: 'text-emerald-700' },
+const STATUS_OPTIONS: Array<[string, string]> = [
+  ['pending', 'Novo'],
+  ['paid', 'Saiu para entrega'],
+  ['completed', 'Concluído'],
+  ['canceled', 'Cancelado'],
 ]
 
-function StatusTimeline({ status }: { status: string }) {
-  const rank = STATUS_RANK[status] ?? 0
-  const isCanceled = status === 'canceled' || status === 'cancelled'
+const STATUS_LABEL_MAP: Record<string, string> = {
+  pending: 'Novo', paid: 'Saiu para entrega', completed: 'Concluído', canceled: 'Cancelado',
+}
 
-  if (isCanceled) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white shadow-sm">
-            <XCircle className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-red-700">Pedido Cancelado</p>
-            <p className="text-xs text-red-500">Este pedido foi cancelado</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">Progresso do Pedido</p>
-      <div className="flex items-start">
-        {ORDER_STEPS.map((step, i) => {
-          const stepRank = STATUS_RANK[step.key] ?? 0
-          const done    = rank > stepRank
-          const current = rank === stepRank
-          const active  = done || current
-          const Icon    = step.Icon
-
-          return (
-            <div key={step.key} className="flex flex-1 flex-col items-center">
-              <div className="flex w-full items-center">
-                <div className={`h-0.5 flex-1 transition-colors ${i === 0 ? 'invisible' : done || current ? step.activeColor : 'bg-slate-200'}`} />
-                <div className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
-                  done    ? `${step.activeColor} border-transparent text-white shadow-sm` :
-                  current ? `${step.activeBg} ${step.activeBorder} ${step.activeText} shadow-md ring-4 ring-offset-1 ${step.activeBorder.replace('border-', 'ring-')}` :
-                            'border-slate-200 bg-white text-slate-300'
-                }`}>
-                  <Icon className="h-4 w-4" />
-                  {current && (
-                    <span className={`absolute inset-0 animate-ping rounded-full opacity-20 ${step.activeBg}`} />
-                  )}
-                </div>
-                <div className={`h-0.5 flex-1 transition-colors ${i === ORDER_STEPS.length - 1 ? 'invisible' : done ? step.activeColor : 'bg-slate-200'}`} />
-              </div>
-              <p className={`mt-2 text-center text-[11px] font-medium leading-tight ${active ? step.activeText : 'text-slate-300'}`}>
-                {step.label}
-              </p>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
+function statusPillClass(status: string) {
+  if (status === 'completed' || status === 'concluded') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+  if (status === 'canceled' || status === 'cancelled') return 'bg-red-100 text-red-700 border-red-200'
+  if (status === 'paid') return 'bg-purple-100 text-purple-700 border-purple-200'
+  return 'bg-amber-100 text-amber-700 border-amber-200'
 }
 
 function formatDateBr(s: string | null | undefined): string {
   if (!s) return '—'
   const d = new Date(String(s).replace(' ', 'T'))
   if (Number.isNaN(d.getTime())) return String(s)
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const yy = d.getFullYear()
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mi = String(d.getMinutes()).padStart(2, '0')
-  return `${dd}/${mm}/${yy} ${hh}:${mi}`
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
 }
 
 function formatPhoneBr(raw: string): string {
   const digits = raw.replace(/\D+/g, '')
-  if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
-  if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  if (digits.length === 11) return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`
+  if (digits.length === 10) return `(${digits.slice(0,2)}) ${digits.slice(2,6)}-${digits.slice(6)}`
   return raw || '—'
 }
 
@@ -311,22 +237,13 @@ function parseUserNotesAndInstructions(notes: string, paymentInstructions: strin
     const line = rawLine.trim()
     if (!line) return
     const pm = line.match(/^Pagamento:\s*.+?(?:\s+[—-]\s+(.+))?$/u)
-    if (pm) {
-      if (pm[1] && !inlineInstructions) inlineInstructions = pm[1].trim()
-      return
-    }
+    if (pm) { if (pm[1] && !inlineInstructions) inlineInstructions = pm[1].trim(); return }
     if (/^Troco para:/i.test(line)) return
     const obs = line.match(/^Observações:\s*(.+)$/is)
-    if (obs) {
-      userLines.push(obs[1].trim())
-      return
-    }
+    if (obs) { userLines.push(obs[1].trim()); return }
     userLines.push(line)
   })
-  return {
-    userNotes: userLines.join('\n'),
-    displayInstructions: paymentInstructions || inlineInstructions || null,
-  }
+  return { userNotes: userLines.join('\n'), displayInstructions: paymentInstructions || inlineInstructions || null }
 }
 
 function parseTrocoFromNotes(notes: string): { changeFor: string; change: string } | null {
@@ -334,8 +251,6 @@ function parseTrocoFromNotes(notes: string): { changeFor: string; change: string
   if (!m) return null
   return { changeFor: m[1], change: m[2] ?? '' }
 }
-
-// Item display helpers --------------------------------------------------------
 
 type LineEntry = { text: string; status: string }
 
@@ -364,13 +279,9 @@ function buildComboLines(combo: ComboData): Array<{ name: string; delta: number;
             const ciRemoved = !!ci.removed || (ciDefaultQty != null && ciDefaultQty > 0 && (ciQty === 0 || ciQty == null))
             if (ciDelta == null && ciDefaultQty != null && ciQty != null) ciDelta = ciQty - ciDefaultQty
             const ciPrice = Number(ci.price ?? 0)
-            if (ciRemoved) {
-              unitLines.push({ text: `Sem ${ciName}`, status: 'Removido' })
-            } else if (ciDelta != null && ciDelta > 0) {
-              unitLines.push({ text: `+${ciDelta}x ${ciName}`, status: ciPrice > 0 ? `+ ${formatCurrency(ciPrice)}` : 'Extra' })
-            } else if (ciDelta != null && ciDelta < 0) {
-              unitLines.push({ text: `Sem ${ciName}`, status: 'Removido' })
-            }
+            if (ciRemoved) unitLines.push({ text: `Sem ${ciName}`, status: 'Removido' })
+            else if (ciDelta != null && ciDelta > 0) unitLines.push({ text: `+${ciDelta}x ${ciName}`, status: ciPrice > 0 ? `+ ${formatCurrency(ciPrice)}` : 'Extra' })
+            else if (ciDelta != null && ciDelta < 0) unitLines.push({ text: `Sem ${ciName}`, status: 'Removido' })
           }
         }
         result.push({ name: `${name} (${unitNum}º)`, delta, unitLines })
@@ -397,45 +308,27 @@ function buildCustomLines(custom: CustomData): LineEntry[] {
       const price = Number(ci.price ?? 0)
       const selected = !!ci.selected || (qty != null && qty > 0)
       const removed = !!ci.removed || (defaultQty != null && defaultQty > 0 && (qty === 0 || qty == null))
-      if (removed) {
-        out.push({ text: `Sem ${name}`, status: 'Removido' })
-        continue
-      }
+      if (removed) { out.push({ text: `Sem ${name}`, status: 'Removido' }); continue }
       const effQty = qty ?? 0
       if (deltaQty == null && defaultQty != null && qty != null) deltaQty = qty - defaultQty
       if (isPool && effQty > 0) {
         const text = effQty > 1 ? `${effQty}x ${name}` : name
         const paidQty = Number(ci.paid_qty ?? 0)
         const paidPrice = Number(ci.unit_price ?? price)
-        const status = paidQty > 0 && paidPrice > 0.009 ? `+ ${formatCurrency(paidQty * paidPrice)}` : 'Incluso'
-        out.push({ text, status })
+        out.push({ text, status: paidQty > 0 && paidPrice > 0.009 ? `+ ${formatCurrency(paidQty * paidPrice)}` : 'Incluso' })
         continue
       }
-      if (isChoice && selected && effQty > 0) {
-        out.push({ text: name, status: price > 0.009 ? `+ ${formatCurrency(price)}` : 'Incluso' })
-        continue
-      }
+      if (isChoice && selected && effQty > 0) { out.push({ text: name, status: price > 0.009 ? `+ ${formatCurrency(price)}` : 'Incluso' }); continue }
       if (deltaQty != null && deltaQty !== 0) {
-        if (deltaQty > 0) {
-          out.push({
-            text: `+${deltaQty > 1 ? `${deltaQty}x ` : ''}${name}`,
-            status: price > 0 ? `+ ${formatCurrency(price)}` : 'Extra',
-          })
-        } else if (deltaQty < 0) {
-          out.push({ text: `Sem ${name}`, status: 'Removido' })
-        }
+        if (deltaQty > 0) out.push({ text: `+${deltaQty > 1 ? `${deltaQty}x ` : ''}${name}`, status: price > 0 ? `+ ${formatCurrency(price)}` : 'Extra' })
+        else if (deltaQty < 0) out.push({ text: `Sem ${name}`, status: 'Removido' })
       } else if (!isChoice && price > 0.009 && effQty > 0) {
-        out.push({
-          text: `${effQty > 1 ? `${effQty}x ` : ''}${name}`,
-          status: `+ ${formatCurrency(price)}`,
-        })
+        out.push({ text: `${effQty > 1 ? `${effQty}x ` : ''}${name}`, status: `+ ${formatCurrency(price)}` })
       }
     }
   }
   return out
 }
-
-// ── Badges ────────────────────────────────────────────────────────────────────
 
 function SourceBadge({ source }: { source: string }) {
   const s = (source || 'manual').toLowerCase()
@@ -465,8 +358,7 @@ function SourceBadge({ source }: { source: string }) {
 
 export default function AdminStoreOrderDetailPage() {
   const ctx = useStoreContext()
-  const payload =
-    (typeof window !== 'undefined' && window.__ADMIN_STORE_ORDER__) || ({} as Payload)
+  const payload = (typeof window !== 'undefined' && window.__ADMIN_STORE_ORDER__) || ({} as Payload)
 
   const order = payload.order
   const urls = payload.urls
@@ -474,22 +366,19 @@ export default function AdminStoreOrderDetailPage() {
 
   const [busy, setBusy] = useState<string | null>(null)
   const [currentStatus, setCurrentStatus] = useState<string>(order?.status ?? 'pending')
+  const [selectedStatus, setSelectedStatus] = useState<string>(order?.status ?? 'pending')
 
   const orderNumber = order?.order_number ?? order?.id ?? 0
   const isIFood = (order?.source ?? '') === 'ifood'
   const canEdit = order?.status === 'pending' && !isIFood
   const totalDiscount = (order?.discount ?? 0) + (order?.loyalty_discount ?? 0)
-  const STATUS_LABEL_MAP: Record<string, string> = {
-    pending: 'Novo', paid: 'Saiu para entrega', completed: 'Concluído', canceled: 'Cancelado',
-  }
-  const statusLabel = statusLabels[order?.status ?? ''] ?? STATUS_LABEL_MAP[order?.status ?? ''] ?? (order?.status ?? '')
+  const statusLabel = statusLabels[currentStatus] ?? STATUS_LABEL_MAP[currentStatus] ?? currentStatus
 
-  const { userNotes, displayInstructions } = useMemo(() => {
-    return parseUserNotesAndInstructions(order?.notes ?? '', payload.payment?.instructions ?? null)
-  }, [order?.notes, payload.payment?.instructions])
-
+  const { userNotes, displayInstructions } = useMemo(
+    () => parseUserNotesAndInstructions(order?.notes ?? '', payload.payment?.instructions ?? null),
+    [order?.notes, payload.payment?.instructions],
+  )
   const troco = useMemo(() => parseTrocoFromNotes(order?.notes ?? ''), [order?.notes])
-
   const historyEvents = useMemo(() => {
     const allowed = new Set(['order.created', 'order.updated', 'order.status_changed', 'order.canceled'])
     return (payload.events ?? []).filter((e) => allowed.has(e.event_type ?? ''))
@@ -517,13 +406,8 @@ export default function AdminStoreOrderDetailPage() {
       fd.set('status', newStatus)
       fd.set('csrf_token', getCsrfToken())
       const res = await fetch(urls.set_status, {
-        method: 'POST',
-        credentials: 'same-origin',
-        body: fd,
-        headers: {
-          'X-CSRF-Token': getCsrfToken(),
-          'X-Requested-With': 'XMLHttpRequest',
-        },
+        method: 'POST', credentials: 'same-origin', body: fd,
+        headers: { 'X-CSRF-Token': getCsrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
       })
       const json = await res.json().catch(() => null) as { success?: boolean; message?: string } | null
       if (json?.success) {
@@ -533,11 +417,8 @@ export default function AdminStoreOrderDetailPage() {
       } else {
         showToast(json?.message ?? 'Não foi possível atualizar o status.', 'error')
       }
-    } catch {
-      showToast('Falha de rede ao atualizar status.', 'error')
-    } finally {
-      setBusy(null)
-    }
+    } catch { showToast('Falha de rede ao atualizar status.', 'error') }
+    finally { setBusy(null) }
   }
 
   async function deleteOrder() {
@@ -547,87 +428,107 @@ export default function AdminStoreOrderDetailPage() {
       const fd = new FormData()
       fd.set('csrf_token', getCsrfToken())
       const res = await fetch(urls.delete, {
-        method: 'POST',
-        credentials: 'same-origin',
-        body: fd,
-        headers: {
-          'X-CSRF-Token': getCsrfToken(),
-          'X-Requested-With': 'XMLHttpRequest',
-        },
+        method: 'POST', credentials: 'same-origin', body: fd,
+        headers: { 'X-CSRF-Token': getCsrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
       })
       if (res.redirected || res.ok) {
         showToast('Pedido excluído.', 'success')
         setTimeout(() => { window.location.href = urls.list }, 400)
-      } else {
-        showToast('Falha ao excluir.', 'error')
-      }
-    } catch {
-      showToast('Falha de rede.', 'error')
-    } finally {
-      setBusy(null)
-    }
+      } else { showToast('Falha ao excluir.', 'error') }
+    } catch { showToast('Falha de rede.', 'error') }
+    finally { setBusy(null) }
+  }
+
+  const pmTypeLabel: Record<string, string> = {
+    credit: 'Crédito', debit: 'Débito', cash: 'Dinheiro',
+    pix: 'Transação instantânea', voucher: 'Vale',
   }
 
   return (
     <AdminStorePageShell section="orders">
+
+      {/* ── Page header ── */}
       <AdminPageHeader
         title={`Pedido #${orderNumber}`}
         description={statusLabel}
         icon={<ShoppingBag className="h-5 w-5" style={{ color: ctx.palette.primaryColor }} />}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="sm" className="gap-1.5">
-              <a href={urls.list}>
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Voltar
-              </a>
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Status pill */}
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${statusPillClass(currentStatus)}`}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              {statusLabel}
+            </span>
             {payload.whatsapp_url && (
-              <Button asChild variant="outline" size="sm" className="gap-1.5 text-emerald-700 border-emerald-300 hover:bg-emerald-50">
+              <Button asChild variant="outline" size="sm" className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
                 <a href={payload.whatsapp_url} target="_blank" rel="noopener noreferrer">
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  WhatsApp
+                  <MessageSquare className="h-3.5 w-3.5" />WhatsApp
                 </a>
               </Button>
             )}
             {canEdit && (
               <Button asChild variant="outline" size="sm" className="gap-1.5">
-                <a href={urls.edit}>
-                  <Edit3 className="h-3.5 w-3.5" />
-                  Editar
-                </a>
+                <a href={urls.edit}><Edit3 className="h-3.5 w-3.5" />Editar</a>
               </Button>
             )}
+            <Button
+              variant="outline" size="sm"
+              onClick={deleteOrder} disabled={busy === 'delete'}
+              className="gap-1.5 border-red-300 text-red-600 hover:bg-red-50"
+            >
+              {busy === 'delete' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Excluir
+            </Button>
             <Button asChild variant="outline" size="sm" className="gap-1.5">
               <a href={urls.print} target="_blank" rel="noopener noreferrer">
-                <Printer className="h-3.5 w-3.5" />
-                Imprimir
+                <Printer className="h-3.5 w-3.5" />Imprimir
               </a>
             </Button>
           </div>
         }
       />
 
-      {/* Status timeline */}
-      <StatusTimeline status={currentStatus} />
-
-      {/* Meta row */}
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <SourceBadge source={order.source} />
-        {order.created_at && (
-          <span className="ml-auto text-xs text-slate-500">
-            Criado em: {formatDateBr(order.created_at)}
-          </span>
-        )}
+      {/* ── Status bar ── */}
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm text-sm">
+        <label className="text-slate-600 shrink-0">Atualizar status:</label>
+        <select
+          value={selectedStatus}
+          onChange={(e) => setSelectedStatus(e.target.value)}
+          disabled={isIFood || busy !== null}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50"
+          style={{ '--tw-ring-color': ctx.palette.primaryColor } as React.CSSProperties}
+        >
+          {STATUS_OPTIONS.map(([key, label]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => applyStatusDirect(selectedStatus)}
+          disabled={isIFood || busy !== null || selectedStatus === currentStatus}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-colors"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          Aplicar
+        </button>
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <SourceBadge source={order.source} />
+          {order.created_at && (
+            <span className="text-slate-500">Criado em: {formatDateBr(order.created_at)}</span>
+          )}
+        </div>
       </div>
 
-      {/* Customer + Summary grid */}
+      {/* ── Customer + Summary grid ── */}
       <div className="grid gap-4 md:grid-cols-2">
+
         {/* Customer */}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-2 text-sm font-medium text-slate-700">Cliente</h2>
+          <h2 className="mb-2 text-sm font-medium text-slate-500">Cliente</h2>
           <div className="text-lg font-semibold text-slate-900">{order.customer_name || '—'}</div>
-          <div className="text-slate-700">{order.customer_phone ? formatPhoneBr(order.customer_phone) : '—'}</div>
+          {order.customer_phone && (
+            <div className="text-slate-700">{formatPhoneBr(order.customer_phone)}</div>
+          )}
           {order.customer_address ? (
             <div className="mt-1 whitespace-pre-line text-sm text-slate-700">{order.customer_address}</div>
           ) : !isIFood ? (
@@ -648,34 +549,41 @@ export default function AdminStoreOrderDetailPage() {
           )}
         </section>
 
-        {/* Summary + Status update */}
+        {/* Summary */}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-2 text-sm font-medium text-slate-700">Resumo</h2>
+          <h2 className="mb-2 text-sm font-medium text-slate-500">Resumo</h2>
           <dl className="space-y-1 text-slate-800">
-            <div className="flex justify-between"><dt>Subtotal</dt><dd>{formatCurrency(order.subtotal)}</dd></div>
-            <div className="flex justify-between"><dt>Entrega</dt><dd>{formatCurrency(order.delivery_fee)}</dd></div>
+            <div className="flex justify-between">
+              <dt>Subtotal</dt>
+              <dd>{formatCurrency(order.subtotal)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt>Entrega</dt>
+              <dd>{formatCurrency(order.delivery_fee)}</dd>
+            </div>
             <div className="flex justify-between">
               <dt>Desconto</dt>
-              <dd>{totalDiscount > 0 ? `- ${formatCurrency(totalDiscount)}` : formatCurrency(0)}</dd>
+              <dd>{totalDiscount > 0 ? `–${formatCurrency(totalDiscount)}` : formatCurrency(0)}</dd>
             </div>
           </dl>
-          <div className="mt-2 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-            <div className="text-sm text-slate-600">Total</div>
-            <div className="text-xl font-semibold text-slate-900">{formatCurrency(order.total)}</div>
+          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+            <span className="text-sm text-slate-600">Total</span>
+            <span className="text-xl font-bold text-slate-900">{formatCurrency(order.total)}</span>
+          </div>
+
+          <div className="mt-3 text-sm text-slate-500">
+            Status atual: <span className="font-medium text-slate-700">{statusLabel}</span>
           </div>
 
           {payload.payment?.name && (
-            <div className="mt-3 flex items-center gap-2">
-              <CreditCard className="h-5 w-5 shrink-0 text-slate-500" />
+            <div className="mt-2 flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50">
+                <CreditCard className="h-4 w-4 text-teal-500" />
+              </div>
               <div className="min-w-0">
                 {payload.payment.type && (
-                  <div className="mb-0.5 text-xs leading-none text-slate-500">
-                    {payload.payment.type === 'credit' ? 'Crédito'
-                      : payload.payment.type === 'debit' ? 'Débito'
-                      : payload.payment.type === 'cash' ? 'Dinheiro'
-                      : payload.payment.type === 'pix' ? 'PIX'
-                      : payload.payment.type === 'voucher' ? 'Vale'
-                      : payload.payment.type}
+                  <div className="text-xs text-slate-500 leading-none">
+                    {pmTypeLabel[payload.payment.type] ?? payload.payment.type}
                   </div>
                 )}
                 <div className="text-sm font-medium text-slate-800">{payload.payment.name}</div>
@@ -687,67 +595,16 @@ export default function AdminStoreOrderDetailPage() {
             <div className="mt-1 flex items-center gap-1 pl-1 text-sm text-slate-600">
               <span>💰</span>
               <span>Troco para: R$ {troco.changeFor}</span>
-              {troco.change && (
-                <span className="text-xs text-slate-400">(Troco: R$ {troco.change})</span>
-              )}
-            </div>
-          )}
-
-          {currentStatus !== 'completed' && currentStatus !== 'canceled' && (
-            <div className="mt-3 border-t border-slate-100 pt-3 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Ações do pedido</p>
-              <div className="flex flex-wrap gap-2">
-                {currentStatus === 'pending' && !isIFood && (
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => applyStatusDirect('paid')}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-purple-700 disabled:opacity-60"
-                  >
-                    {busy === 'paid'
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <Truck className="h-3.5 w-3.5" />}
-                    {busy === 'paid' ? 'Registrando…' : 'Saiu para entrega'}
-                  </button>
-                )}
-                {!isIFood && (
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => applyStatusDirect('completed')}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
-                  >
-                    {busy === 'completed'
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <CheckCheck className="h-3.5 w-3.5" />}
-                    {busy === 'completed' ? 'Concluindo…' : 'Concluído'}
-                  </button>
-                )}
-                {!isIFood && (
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => applyStatusDirect('canceled')}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm transition hover:bg-red-50 disabled:opacity-60"
-                  >
-                    {busy === 'canceled'
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <XCircle className="h-3.5 w-3.5" />}
-                    {busy === 'canceled' ? 'Cancelando…' : 'Cancelar pedido'}
-                  </button>
-                )}
-              </div>
+              {troco.change && <span className="text-xs text-slate-400">(Troco: R$ {troco.change})</span>}
             </div>
           )}
         </section>
       </div>
 
-      {/* iFood info */}
-      {isIFood && payload.ifood && (
-        <IFoodInfoCard data={payload.ifood} />
-      )}
+      {/* ── iFood info ── */}
+      {isIFood && payload.ifood && <IFoodInfoCard data={payload.ifood} />}
 
-      {/* Items */}
+      {/* ── Items ── */}
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-4 py-3">
           <h2 className="text-sm font-medium text-slate-700">Itens do Pedido</h2>
@@ -759,32 +616,16 @@ export default function AdminStoreOrderDetailPage() {
               <p className="mt-2 text-sm text-slate-500">Sem itens neste pedido.</p>
             </div>
           ) : (
-            order.items.map((item, idx) => (
-              <OrderItemRow key={item.id ?? idx} item={item} />
-            ))
+            order.items.map((item, idx) => <OrderItemRow key={item.id ?? idx} item={item} />)
           )}
         </div>
       </section>
 
-      {/* History */}
+      {/* ── History ── */}
       {historyEvents.length > 0 && (
         <HistorySection events={historyEvents} statusLabels={statusLabels} />
       )}
 
-      {/* Danger zone */}
-      <div className="flex justify-end pt-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={deleteOrder}
-          disabled={busy === 'delete'}
-          className="gap-1.5 border-red-300 text-red-700 hover:bg-red-50"
-        >
-          {busy === 'delete' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-          Excluir pedido
-        </Button>
-      </div>
     </AdminStorePageShell>
   )
 }
@@ -795,52 +636,46 @@ function OrderItemRow({ item }: { item: OrderItem }) {
   const totalDelta = Number(item.customization_data?.total_delta ?? 0)
   const baseUnit = item.unit_price - totalDelta
   const showItemNotes = !!item.notes && !!item.product_name
-
   const comboLines = item.combo_data ? buildComboLines(item.combo_data) : []
   const customLines = item.customization_data ? buildCustomLines(item.customization_data) : []
 
   return (
     <div className="p-4 transition-colors hover:bg-slate-50/60">
-      <div className="mb-3 flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-              {item.quantity}x
-            </span>
-            <h3 className="text-base font-semibold text-slate-900">
-              {item.product_name || item.notes || '—'}
-            </h3>
-          </div>
+      {/* Main row */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center justify-center rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+            {item.quantity}x
+          </span>
+          <h3 className="text-base font-semibold text-slate-900">
+            {item.product_name || item.notes || '—'}
+          </h3>
         </div>
-        <div className="text-right">
+        <div className="text-right shrink-0">
           {totalDelta > 0.009 && (
             <div className="mb-0.5 text-xs text-slate-400">
-              {formatCurrency(baseUnit)}{' '}
-              <span className="font-medium text-emerald-600">+{formatCurrency(totalDelta)}</span>
+              {formatCurrency(baseUnit)} <span className="text-emerald-600">+{formatCurrency(totalDelta)}</span>
             </div>
           )}
-          <div className="text-lg font-bold text-slate-900">{formatCurrency(item.line_total)}</div>
+          <div className="text-base font-bold text-slate-900">{formatCurrency(item.line_total)}</div>
         </div>
       </div>
 
+      {/* Combo options */}
       {comboLines.length > 0 && (
-        <div className="mt-3 border-t border-slate-100 pt-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <div className="mt-3 pl-10">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Opções do Combo
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {comboLines.map((line, i) => (
               <div key={i}>
                 <div className="flex items-center justify-between text-sm">
-                  <span className={i % 2 === 0 ? 'font-medium text-slate-700' : 'text-slate-600'}>
-                    {line.name}
-                  </span>
-                  <span className="text-slate-400">
-                    {Math.abs(line.delta) > 0.009 ? `+ ${formatCurrency(line.delta)}` : 'Incluso'}
-                  </span>
+                  <span className="text-slate-700">{line.name}</span>
+                  <span className="text-slate-400">{Math.abs(line.delta) > 0.009 ? `+ ${formatCurrency(line.delta)}` : 'Incluso'}</span>
                 </div>
-                {line.unitLines && line.unitLines.map((sub, j) => (
-                  <div key={j} className="flex items-center justify-between pl-4 text-sm">
+                {line.unitLines?.map((sub, j) => (
+                  <div key={j} className="flex items-center justify-between pl-3 text-sm">
                     <span className="text-slate-600">{sub.text}</span>
                     <span className="text-xs text-slate-400">{sub.status}</span>
                   </div>
@@ -851,17 +686,16 @@ function OrderItemRow({ item }: { item: OrderItem }) {
         </div>
       )}
 
+      {/* Customizations */}
       {customLines.length > 0 && (
-        <div className="mt-3 border-t border-slate-100 pt-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <div className="mt-3 pl-10">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Personalize os ingredientes
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {customLines.map((line, i) => (
               <div key={i} className="flex items-center justify-between text-sm">
-                <span className={i % 2 === 0 ? 'font-medium text-slate-700' : 'text-slate-600'}>
-                  {line.text}
-                </span>
+                <span className="text-slate-700">{line.text}</span>
                 <span className="text-slate-400">{line.status}</span>
               </div>
             ))}
@@ -869,11 +703,10 @@ function OrderItemRow({ item }: { item: OrderItem }) {
         </div>
       )}
 
+      {/* Item notes */}
       {showItemNotes && (
-        <div className="mt-3 border-t border-slate-100 pt-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Observações
-          </div>
+        <div className="mt-3 pl-10">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Observações</div>
           <p className="whitespace-pre-line text-sm text-slate-600">{item.notes}</p>
         </div>
       )}
@@ -894,76 +727,32 @@ function IFoodInfoCard({ data }: { data: IFoodData }) {
         <h2 className="text-sm font-semibold text-red-800">Informações do iFood</h2>
       </div>
       <div className="grid gap-3 text-sm sm:grid-cols-2">
-        <div>
-          <span className="font-medium text-red-700">ID iFood:</span>
-          <span className="ml-1 font-mono text-xs text-red-900">{data.ifood_order_id || '—'}</span>
-        </div>
-        {data.ifood_display_id && (
-          <div>
-            <span className="font-medium text-red-700">Código:</span>
-            <span className="ml-1 font-semibold text-red-900">#{data.ifood_display_id}</span>
-          </div>
-        )}
-        {data.status && (
-          <div>
-            <span className="font-medium text-red-700">Status iFood:</span>
-            <span className="ml-1 text-red-900">{data.status}</span>
-          </div>
-        )}
+        <div><span className="font-medium text-red-700">ID iFood:</span> <span className="font-mono text-xs text-red-900">{data.ifood_order_id || '—'}</span></div>
+        {data.ifood_display_id && <div><span className="font-medium text-red-700">Código:</span> <span className="font-semibold text-red-900">#{data.ifood_display_id}</span></div>}
+        {data.status && <div><span className="font-medium text-red-700">Status iFood:</span> <span className="text-red-900 ml-1">{data.status}</span></div>}
         {data.order_type && (
-          <div>
-            <span className="font-medium text-red-700">Tipo:</span>
-            <span className="ml-1 text-red-900">
-              {data.order_type === 'DELIVERY' ? 'Entrega' : data.order_type === 'TAKEOUT' ? 'Retirada' : data.order_type}
-            </span>
+          <div><span className="font-medium text-red-700">Tipo:</span>
+            <span className="text-red-900 ml-1">{data.order_type === 'DELIVERY' ? 'Entrega' : data.order_type === 'TAKEOUT' ? 'Retirada' : data.order_type}</span>
           </div>
         )}
-        {data.scheduled_datetime && (
-          <div>
-            <span className="font-medium text-red-700">📅 Agendado para:</span>
-            <span className="ml-1 font-semibold text-red-900">{formatDateBr(data.scheduled_datetime)}</span>
-          </div>
-        )}
-        {data.order_timing === 'SCHEDULED' && (
-          <div>
-            <span className="font-medium text-red-700">Timing:</span>
-            <span className="ml-1 inline-flex items-center rounded bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-900">
-              AGENDADO
-            </span>
-          </div>
-        )}
-        {data.customer_document && (
-          <div>
-            <span className="font-medium text-red-700">CPF/CNPJ:</span>
-            <span className="ml-1 text-red-900">{data.customer_document}</span>
-          </div>
-        )}
+        {data.scheduled_datetime && <div><span className="font-medium text-red-700">📅 Agendado:</span> <span className="font-semibold text-red-900 ml-1">{formatDateBr(data.scheduled_datetime)}</span></div>}
+        {data.customer_document && <div><span className="font-medium text-red-700">CPF/CNPJ:</span> <span className="text-red-900 ml-1">{data.customer_document}</span></div>}
         {data.pickup_code && (
-          <div>
-            <span className="font-medium text-red-700">🔑 Código de Retirada:</span>
-            <span className="ml-1 rounded bg-white px-2 py-0.5 font-mono text-lg font-bold text-red-900">
-              {data.pickup_code}
-            </span>
+          <div><span className="font-medium text-red-700">🔑 Retirada:</span>
+            <span className="ml-1 rounded bg-white px-2 py-0.5 font-mono text-lg font-bold text-red-900">{data.pickup_code}</span>
           </div>
         )}
         {data.delivered_by && (
-          <div>
-            <span className="font-medium text-red-700">Entrega por:</span>
-            <span className="ml-1 text-red-900">
-              {data.delivered_by === 'IFOOD' ? 'iFood' : data.delivered_by === 'MERCHANT' ? 'Loja' : data.delivered_by}
-            </span>
+          <div><span className="font-medium text-red-700">Entrega por:</span>
+            <span className="text-red-900 ml-1">{data.delivered_by === 'IFOOD' ? 'iFood' : data.delivered_by === 'MERCHANT' ? 'Loja' : data.delivered_by}</span>
           </div>
         )}
         {addr && (addr.streetName || addr.city) && (
           <div className="sm:col-span-2">
-            <span className="font-medium text-red-700">
-              <MapPin className="mr-1 inline-block h-3.5 w-3.5" />
-              Endereço iFood:
-            </span>
+            <span className="font-medium text-red-700"><MapPin className="mr-1 inline-block h-3.5 w-3.5" />Endereço iFood:</span>
             <div className="mt-1 text-red-900">
               {[addr.streetName, addr.streetNumber].filter(Boolean).join(', ')}
-              {addr.complement && ` - ${addr.complement}`}
-              <br />
+              {addr.complement && ` - ${addr.complement}`}<br />
               {[addr.neighborhood, [addr.city, addr.state].filter(Boolean).join('/')].filter(Boolean).join(' - ')}
               {addr.postalCode && <><br />CEP: {addr.postalCode}</>}
               {addr.reference && <><br /><em>Ref: {addr.reference}</em></>}
@@ -973,20 +762,12 @@ function IFoodInfoCard({ data }: { data: IFoodData }) {
         {deliveryObservations && (
           <div className="sm:col-span-2">
             <span className="font-medium text-red-700">📝 Obs. Entrega:</span>
-            <div className="mt-1 whitespace-pre-line rounded-lg bg-white p-2 text-red-900">
-              {deliveryObservations}
-            </div>
-          </div>
-        )}
-        {data.created_at && (
-          <div>
-            <span className="font-medium text-red-700">Recebido em:</span>
-            <span className="ml-1 text-red-900">{data.created_at}</span>
+            <div className="mt-1 whitespace-pre-line rounded-lg bg-white p-2 text-red-900">{deliveryObservations}</div>
           </div>
         )}
         {data.cancellation_reason && (
           <div className="sm:col-span-2">
-            <span className="font-medium text-red-700">❌ Motivo Cancelamento:</span>
+            <span className="font-medium text-red-700">❌ Cancelamento:</span>
             <span className="ml-1 text-red-900">{data.cancellation_reason}</span>
           </div>
         )}
@@ -997,11 +778,7 @@ function IFoodInfoCard({ data }: { data: IFoodData }) {
           <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-700">Pagamento</div>
           <div className="space-y-2">
             {paymentMethods.map((pm, i) => {
-              const labels: Record<string, string> = {
-                CREDIT: 'Crédito', DEBIT: 'Débito',
-                MEAL_VOUCHER: 'Vale Refeição', FOOD_VOUCHER: 'Vale Alimentação',
-                PIX: 'PIX', CASH: 'Dinheiro',
-              }
+              const labels: Record<string, string> = { CREDIT: 'Crédito', DEBIT: 'Débito', MEAL_VOUCHER: 'Vale Refeição', FOOD_VOUCHER: 'Vale Alimentação', PIX: 'PIX', CASH: 'Dinheiro' }
               const methodName = pm.method ?? ''
               const display = labels[methodName.toUpperCase()] ?? methodName
               const brand = pm.card?.brand ?? pm.brand
@@ -1013,9 +790,7 @@ function IFoodInfoCard({ data }: { data: IFoodData }) {
                   <div className="flex items-center justify-between text-sm">
                     <div>
                       <span className="font-medium text-red-900">{display}{brand ? ` (${brand})` : ''}</span>
-                      <span className={`ml-1 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${
-                        prepaid ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'
-                      }`}>
+                      <span className={`ml-1 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${prepaid ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
                         {prepaid ? 'Pago Online' : 'Pagar na Entrega'}
                       </span>
                     </div>
@@ -1023,14 +798,8 @@ function IFoodInfoCard({ data }: { data: IFoodData }) {
                   </div>
                   {methodName.toUpperCase() === 'CASH' && changeFor > 0 && (
                     <>
-                      <div className="flex items-center justify-between pl-4 text-sm">
-                        <span className="text-red-700">💰 Troco para:</span>
-                        <span className="font-semibold text-red-900">{formatCurrency(changeFor)}</span>
-                      </div>
-                      <div className="flex items-center justify-between pl-4 text-sm">
-                        <span className="text-red-700">Troco:</span>
-                        <span className="font-semibold text-red-900">{formatCurrency(changeFor - value)}</span>
-                      </div>
+                      <div className="flex items-center justify-between pl-4 text-sm"><span className="text-red-700">💰 Troco para:</span><span className="font-semibold text-red-900">{formatCurrency(changeFor)}</span></div>
+                      <div className="flex items-center justify-between pl-4 text-sm"><span className="text-red-700">Troco:</span><span className="font-semibold text-red-900">{formatCurrency(changeFor - value)}</span></div>
                     </>
                   )}
                 </div>
@@ -1042,9 +811,7 @@ function IFoodInfoCard({ data }: { data: IFoodData }) {
 
       {data.benefits && data.benefits.length > 0 && (
         <div className="mt-4 border-t border-red-200 pt-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-700">
-            Cupons / Benefícios
-          </div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-700">Cupons / Benefícios</div>
           <div className="space-y-1.5">
             {data.benefits.map((b, i) => {
               const value = Number(b.value ?? 0)
@@ -1056,15 +823,10 @@ function IFoodInfoCard({ data }: { data: IFoodData }) {
                 <div key={i} className="flex items-center justify-between text-sm">
                   <div>
                     <span className="font-medium text-red-900">🎫 Desconto {target}</span>
-                    {ifoodSponsor != null && merchantSponsor != null ? (
-                      <span className="ml-1 text-xs text-red-600">
-                        (iFood: {formatCurrency(Number(ifoodSponsor))} | Loja: {formatCurrency(Number(merchantSponsor))})
-                      </span>
-                    ) : ifoodSponsor != null ? (
-                      <span className="ml-1 text-xs text-red-600">(Pago pelo iFood)</span>
-                    ) : merchantSponsor != null ? (
-                      <span className="ml-1 text-xs text-red-600">(Pago pela Loja)</span>
-                    ) : null}
+                    {ifoodSponsor != null && merchantSponsor != null
+                      ? <span className="ml-1 text-xs text-red-600">(iFood: {formatCurrency(Number(ifoodSponsor))} | Loja: {formatCurrency(Number(merchantSponsor))})</span>
+                      : ifoodSponsor != null ? <span className="ml-1 text-xs text-red-600">(Pago pelo iFood)</span>
+                      : merchantSponsor != null ? <span className="ml-1 text-xs text-red-600">(Pago pela Loja)</span> : null}
                   </div>
                   <span className="font-semibold text-emerald-700">- {formatCurrency(value)}</span>
                 </div>
@@ -1084,13 +846,13 @@ function HistorySection({ events, statusLabels }: { events: OrderEvent[]; status
     'order.status_changed': 'Status alterado',
     'order.canceled': 'Pedido cancelado',
   }
-  const formatStatus = (s: unknown) => statusLabels[String(s ?? '')] ?? String(s ?? '')
+  const formatStatus = (s: unknown) => statusLabels[String(s ?? '')] ?? STATUS_LABEL_MAP[String(s ?? '')] ?? String(s ?? '')
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-4 py-3">
         <h2 className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
-          <History className="h-4 w-4 text-slate-500" />
+          <History className="h-4 w-4 text-slate-400" />
           Histórico
         </h2>
       </div>
@@ -1106,16 +868,14 @@ function HistorySection({ events, statusLabels }: { events: OrderEvent[]; status
             <div key={idx} className="p-4 text-sm text-slate-700">
               <div className="flex items-center justify-between gap-2">
                 <div className="font-semibold text-slate-900">{label}</div>
-                {event.created_at && (
-                  <div className="text-xs text-slate-500">{formatDateBr(event.created_at)}</div>
-                )}
+                {event.created_at && <div className="text-xs text-slate-400">{formatDateBr(event.created_at)}</div>}
               </div>
               {statusChange ? (
                 <div className="mt-1 text-slate-600">
-                  Status: {formatStatus(statusChange.from)} → {formatStatus(statusChange.to)}
+                  {formatStatus(statusChange.from)} → {formatStatus(statusChange.to)}
                 </div>
               ) : event.event_type === 'order.status_changed' && event.status ? (
-                <div className="mt-1 text-slate-600">Status: {formatStatus(event.status)}</div>
+                <div className="mt-1 text-slate-600">{formatStatus(event.status)}</div>
               ) : null}
               {event.event_type === 'order.updated' && before && after && (
                 <UpdateDiff before={before} after={after} />
@@ -1132,18 +892,16 @@ type UpdateValues = Record<string, unknown>
 
 function UpdateDiff({ before, after }: { before: UpdateValues; after: UpdateValues }) {
   const num = (v: unknown) => Number(v ?? 0)
-  const totalDiscount = (r: UpdateValues) => num(r.discount) + num(r.loyalty_discount)
+  const disc = (r: UpdateValues) => num(r.discount) + num(r.loyalty_discount)
   return (
     <>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {[before, after].map((row, idx) => (
           <div key={idx}>
-            <div className="text-xs uppercase text-slate-500">{idx === 0 ? 'Antes' : 'Depois'}</div>
+            <div className="text-xs uppercase text-slate-400 mb-1">{idx === 0 ? 'Antes' : 'Depois'}</div>
             <div className="text-slate-700">Subtotal: {formatCurrency(num(row.subtotal))}</div>
             <div className="text-slate-700">Entrega: {formatCurrency(num(row.delivery_fee))}</div>
-            <div className="text-slate-700">
-              Desconto: {totalDiscount(row) > 0 ? `- ${formatCurrency(totalDiscount(row))}` : formatCurrency(0)}
-            </div>
+            <div className="text-slate-700">Desconto: {disc(row) > 0 ? `- ${formatCurrency(disc(row))}` : formatCurrency(0)}</div>
             <div className="font-semibold text-slate-900">Total: {formatCurrency(num(row.total))}</div>
           </div>
         ))}
@@ -1152,19 +910,17 @@ function UpdateDiff({ before, after }: { before: UpdateValues; after: UpdateValu
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {[before.items, after.items].map((items, idx) => (
             <div key={idx}>
-              <div className="text-xs uppercase text-slate-500">{idx === 0 ? 'Itens antes' : 'Itens depois'}</div>
+              <div className="text-xs uppercase text-slate-400 mb-1">{idx === 0 ? 'Itens antes' : 'Itens depois'}</div>
               {Array.isArray(items) && items.length > 0 ? (
-                <ul className="mt-1 space-y-1 text-slate-600">
+                <ul className="space-y-1 text-slate-600">
                   {(items as Array<Record<string, unknown>>).map((it, i) => {
                     const qty = num(it.quantity)
                     const name = String(it.name ?? '')
                     const line = Number(it.line_total ?? num(it.unit_price) * qty)
-                    return <li key={i}>{`${qty}x ${name}`} — {formatCurrency(line)}</li>
+                    return <li key={i}>{qty}x {name} — {formatCurrency(line)}</li>
                   })}
                 </ul>
-              ) : (
-                <div className="mt-1 text-xs text-slate-400">Sem itens</div>
-              )}
+              ) : <div className="text-xs text-slate-400">Sem itens</div>}
             </div>
           ))}
         </div>

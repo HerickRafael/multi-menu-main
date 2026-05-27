@@ -685,11 +685,33 @@ class AdminOrdersController extends Controller
         [$u, $company] = $this->guard($slug);
         $db = $this->db();
 
+        $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+            && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
         $orderId = (int)($_POST['id'] ?? 0);
         $status  = $_POST['status'] ?? '';
 
         $result = OrderStatusService::updateForCompany($db, (int)$company['id'], $orderId, $status);
 
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            if (!empty($result['ok'])) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Status atualizado com sucesso',
+                    'status'  => $result['internal_status'] ?? $status,
+                ]);
+            } else {
+                http_response_code(422);
+                echo json_encode([
+                    'success' => false,
+                    'message' => $result['error'] ?? 'Não foi possível atualizar o status',
+                ]);
+            }
+            exit;
+        }
+
+        // Fallback para formulários PHP legados
         if (!empty($result['ok'])) {
             header('Location: ' . base_url('admin/' . rawurlencode($company['slug']) . '/orders/show?id=' . $orderId));
             exit;

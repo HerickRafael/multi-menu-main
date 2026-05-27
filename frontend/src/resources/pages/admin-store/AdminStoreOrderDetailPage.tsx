@@ -10,6 +10,7 @@ import {
   Edit3,
   Globe,
   History,
+  Loader2,
   MapPin,
   MessageSquare,
   Package,
@@ -493,6 +494,7 @@ export default function AdminStoreOrderDetailPage() {
   const statusLabels = payload.status_labels ?? {}
 
   const [busy, setBusy] = useState<string | null>(null)
+  const [currentStatus, setCurrentStatus] = useState<string>(order?.status ?? 'pending')
 
   const orderNumber = order?.order_number ?? order?.id ?? 0
   const isIFood = (order?.source ?? '') === 'ifood'
@@ -523,7 +525,10 @@ export default function AdminStoreOrderDetailPage() {
   }
 
   async function applyStatusDirect(newStatus: string) {
-    setBusy('status')
+    if (newStatus === 'canceled') {
+      if (!window.confirm('Tem certeza que deseja cancelar este pedido?')) return
+    }
+    setBusy(newStatus)
     try {
       const fd = new FormData()
       fd.set('id', String(order.id))
@@ -538,14 +543,16 @@ export default function AdminStoreOrderDetailPage() {
           'X-Requested-With': 'XMLHttpRequest',
         },
       })
-      if (res.redirected || res.ok) {
-        showToast('Status atualizado.', 'success')
-        setTimeout(() => window.location.reload(), 500)
+      const json = await res.json().catch(() => null) as { success?: boolean; message?: string } | null
+      if (json?.success) {
+        showToast(json.message ?? 'Status atualizado.', 'success')
+        setCurrentStatus(newStatus)
+        setTimeout(() => window.location.reload(), 600)
       } else {
-        showToast('Falha ao atualizar status.', 'error')
+        showToast(json?.message ?? 'Não foi possível atualizar o status.', 'error')
       }
     } catch {
-      showToast('Falha de rede.', 'error')
+      showToast('Falha de rede ao atualizar status.', 'error')
     } finally {
       setBusy(null)
     }
@@ -620,7 +627,7 @@ export default function AdminStoreOrderDetailPage() {
       />
 
       {/* Status timeline */}
-      <StatusTimeline status={order.status} isIfood={isIFood} />
+      <StatusTimeline status={currentStatus} isIfood={isIFood} />
 
       {/* Meta row */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -701,44 +708,48 @@ export default function AdminStoreOrderDetailPage() {
             </div>
           )}
 
-          {!isIFood && order.status !== 'completed' && order.status !== 'canceled' && (
-            <div className="mt-3 flex flex-wrap gap-2 border-t border-zinc-100 pt-3">
-              <p className="w-full text-xs font-medium text-zinc-500">Avançar status:</p>
-              {order.status === 'pending' && (
-                <Button
+          {!isIFood && currentStatus !== 'completed' && currentStatus !== 'canceled' && (
+            <div className="mt-3 border-t border-zinc-100 pt-3 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Ações do pedido</p>
+              <div className="flex flex-wrap gap-2">
+                {currentStatus === 'pending' && (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => applyStatusDirect('paid')}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    {busy === 'paid'
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    {busy === 'paid' ? 'Confirmando…' : 'Confirmar pedido'}
+                  </button>
+                )}
+                {currentStatus === 'paid' && (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => applyStatusDirect('completed')}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    {busy === 'completed'
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <CheckCheck className="h-3.5 w-3.5" />}
+                    {busy === 'completed' ? 'Concluindo…' : 'Marcar como concluído'}
+                  </button>
+                )}
+                <button
                   type="button"
-                  size="sm"
-                  disabled={busy === 'status'}
-                  onClick={() => applyStatusDirect('paid')}
-                  className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white border-0"
+                  disabled={busy !== null}
+                  onClick={() => applyStatusDirect('canceled')}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm transition hover:bg-red-50 disabled:opacity-60"
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Confirmar pedido
-                </Button>
-              )}
-              {order.status === 'paid' && (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={busy === 'status'}
-                  onClick={() => applyStatusDirect('completed')}
-                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0"
-                >
-                  <CheckCheck className="h-3.5 w-3.5" />
-                  Marcar como concluído
-                </Button>
-              )}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={busy === 'status'}
-                onClick={() => applyStatusDirect('canceled')}
-                className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
-              >
-                <XCircle className="h-3.5 w-3.5" />
-                Cancelar pedido
-              </Button>
+                  {busy === 'canceled'
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <XCircle className="h-3.5 w-3.5" />}
+                  {busy === 'canceled' ? 'Cancelando…' : 'Cancelar pedido'}
+                </button>
+              </div>
             </div>
           )}
         </section>

@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Clock,
   Eye,
+  Globe,
   Loader2,
   MoreVertical,
   Package,
@@ -13,27 +14,25 @@ import {
   PlusCircle,
   RefreshCw,
   ShoppingBag,
-  ShoppingCart,
-  Store,
+  ShoppingBag as EmptyIcon,
   Truck,
   XCircle,
 } from 'lucide-react'
 
 function IFoodLogo({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      role="img"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="currentColor"
-      aria-hidden="true"
-      className={className}
-    >
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
       <path d="M8.428 1.67c-4.65 0-7.184 4.149-7.184 6.998 0 2.294 2.2 3.299 4.25 3.299l-.006-.006c4.244 0 7.184-3.854 7.184-6.998 0-2.29-2.175-3.293-4.244-3.293zm11.328 0c-4.65 0-7.184 4.149-7.184 6.998 0 2.294 2.2 3.299 4.25 3.299l-.006-.006C21.061 11.96 24 8.107 24 4.963c0-2.29-2.18-3.293-4.244-3.293zM14.172 14.52l2.435 1.834c-2.17 2.07-6.124 3.525-9.353 3.17A8.913 8.913 0 01.23 14.541H0a9.598 9.598 0 008.828 7.758c3.814.24 7.323-.905 9.947-3.13l-.004.007 1.08 2.988 1.555-7.623-7.234-.02Z" />
     </svg>
   )
 }
-import { Badge } from '@/components/ui/badge'
+
+function SourceIcon({ source, className }: { source: string; className?: string }) {
+  const s = (source || 'manual').toLowerCase()
+  if (s === 'ifood') return <IFoodLogo className={className ?? 'h-3.5 w-3.5 text-red-500'} />
+  if (s === 'website') return <Globe className={className ?? 'h-3.5 w-3.5 text-blue-500'} />
+  return <ClipboardList className={className ?? 'h-3.5 w-3.5 text-slate-400'} />
+}
 import { Button } from '@/components/ui/button'
 import {
   AdminPageHeader,
@@ -111,46 +110,110 @@ const SOURCE_TABS: Array<{ value: string | null; label: string }> = [
   { value: 'manual',  label: 'Manual' },
 ]
 
-// ── Status badge ─────────────────────────────────────────────────────────────
+// ── Status config ─────────────────────────────────────────────────────────────
 
-const STATUS_INFO: Record<string, { label: string; cls: string; icon: typeof Clock }> = {
-  pending:    { label: 'Novo',       cls: 'bg-amber-100 text-amber-700 border-amber-200',   icon: Clock },
-  confirmed:  { label: 'Confirmado', cls: 'bg-blue-100 text-blue-700 border-blue-200',      icon: CheckCircle2 },
-  ready:      { label: 'Pronto',     cls: 'bg-indigo-100 text-indigo-700 border-indigo-200', icon: Package },
-  dispatched: { label: 'Em Entrega', cls: 'bg-purple-100 text-purple-700 border-purple-200', icon: Bike },
-  completed:  { label: 'Concluído',  cls: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: CheckCheck },
-  canceled:   { label: 'Cancelado',  cls: 'bg-red-100 text-red-700 border-red-200',         icon: XCircle },
-  // aliases from DB
-  paid:       { label: 'Confirmado', cls: 'bg-blue-100 text-blue-700 border-blue-200',      icon: CheckCircle2 },
+// Normalized order: maps every possible DB/iFood value to a canonical key
+const STATUS_RANK: Record<string, number> = {
+  pending: 0, placed: 0,
+  paid: 1, confirmed: 1,
+  ready: 2,
+  dispatched: 3,
+  completed: 4, concluded: 4,
+  canceled: -1, cancelled: -1,
 }
 
-function StatusBadge({ status, label }: { status: string; label?: string }) {
-  const info = STATUS_INFO[status] ?? { label: label ?? status, cls: 'bg-zinc-100 text-zinc-700 border-zinc-200', icon: Clock }
-  const Icon = info.icon
+type StatusMeta = { label: string; cls: string; dot: string; icon: typeof Clock }
+const STATUS_META: Record<string, StatusMeta> = {
+  pending:    { label: 'Aguardando', cls: 'bg-amber-50 text-amber-700 border-amber-200',    dot: 'bg-amber-400',   icon: Clock },
+  confirmed:  { label: 'Confirmado', cls: 'bg-blue-50 text-blue-700 border-blue-200',       dot: 'bg-blue-500',    icon: CheckCircle2 },
+  ready:      { label: 'Pronto',     cls: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500',  icon: Package },
+  dispatched: { label: 'Em Entrega', cls: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500',  icon: Bike },
+  completed:  { label: 'Concluído',  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: CheckCheck },
+  canceled:   { label: 'Cancelado',  cls: 'bg-red-50 text-red-700 border-red-200',          dot: 'bg-red-400',     icon: XCircle },
+  paid:       { label: 'Confirmado', cls: 'bg-blue-50 text-blue-700 border-blue-200',       dot: 'bg-blue-500',    icon: CheckCircle2 },
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const meta = STATUS_META[status] ?? { label: status, cls: 'bg-zinc-100 text-zinc-600 border-zinc-200', dot: 'bg-zinc-400', icon: Clock }
+  const Icon = meta.icon
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${info.cls}`}>
-      <Icon className="h-3 w-3" />
-      {label ?? info.label}
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.cls}`}>
+      <Icon className="h-3 w-3 shrink-0" />
+      {meta.label}
     </span>
   )
 }
 
-function SourceBadge({ source }: { source: string }) {
-  const s = (source || 'manual').toLowerCase()
-  if (s === 'ifood') return (
-    <Badge className="gap-1 border-transparent bg-red-100 text-red-700 hover:bg-red-100">
-      <IFoodLogo className="h-3 w-3 shrink-0" />iFood
-    </Badge>
-  )
-  if (s === 'website') return (
-    <Badge className="gap-1 border-transparent bg-blue-100 text-blue-700 hover:bg-blue-100">
-      <Store className="h-3 w-3 shrink-0" />Site
-    </Badge>
-  )
+// ── Status pipeline (Origem column) ──────────────────────────────────────────
+
+type PipelineStep = {
+  key: string
+  label: string
+  activeColor: string   // dot / line active color (Tailwind bg class)
+  activeText: string    // text active color (Tailwind text class)
+  inactiveColor: string // dot inactive
+}
+
+const PIPELINE_STEPS: PipelineStep[] = [
+  { key: 'confirmed', label: 'Confirmado', activeColor: 'bg-blue-500',    activeText: 'text-blue-600',   inactiveColor: 'bg-zinc-200' },
+  { key: 'ready',     label: 'Pronto',     activeColor: 'bg-indigo-500',  activeText: 'text-indigo-600', inactiveColor: 'bg-zinc-200' },
+  { key: 'dispatched',label: 'Em Entrega', activeColor: 'bg-purple-500',  activeText: 'text-purple-600', inactiveColor: 'bg-zinc-200' },
+]
+
+function StatusPipeline({ status }: { status: string }) {
+  const rank = STATUS_RANK[status] ?? 0
+
+  if (status === 'canceled' || status === 'cancelled') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
+        <XCircle className="h-3 w-3 shrink-0" />Cancelado
+      </span>
+    )
+  }
+  if (status === 'completed' || status === 'concluded') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+        <CheckCheck className="h-3 w-3 shrink-0" />Concluído
+      </span>
+    )
+  }
+  if (rank === 0) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+        <Clock className="h-3 w-3 shrink-0" />Aguardando
+      </span>
+    )
+  }
+
   return (
-    <Badge className="gap-1 border-transparent bg-slate-100 text-slate-700 hover:bg-slate-100">
-      <ClipboardList className="h-3 w-3 shrink-0" />Manual
-    </Badge>
+    <div className="flex items-center gap-1">
+      {PIPELINE_STEPS.map((step, i) => {
+        const stepRank = STATUS_RANK[step.key] ?? 0
+        const done    = rank > stepRank
+        const current = rank === stepRank
+        const active  = done || current
+
+        return (
+          <div key={step.key} className="flex items-center gap-1">
+            {i > 0 && (
+              <div className={`h-px w-3 rounded-full transition-colors ${active ? step.activeColor : 'bg-zinc-200'}`} />
+            )}
+            <div className="flex flex-col items-center gap-0.5">
+              <div className={`h-2 w-2 rounded-full ring-2 ring-offset-1 transition-colors ${
+                done    ? `${step.activeColor} ring-transparent` :
+                current ? `${step.activeColor} ring-current` :
+                          `${step.inactiveColor} ring-transparent`
+              } ${current ? step.activeText : ''}`} />
+              <span className={`text-[9px] font-medium leading-none transition-colors ${
+                active ? step.activeText : 'text-zinc-300'
+              }`}>
+                {step.label}
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -430,10 +493,7 @@ export default function AdminStoreOrdersPage() {
       key: 'display_id',
       cell: (o) => (
         <div className="flex items-center gap-2">
-          {o.is_ifood
-            ? <IFoodLogo className="h-3.5 w-3.5 text-red-500 shrink-0" />
-            : <ShoppingCart className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-          }
+          <SourceIcon source={o.source} />
           <div className="min-w-0">
             <p className="font-mono text-sm font-medium text-zinc-900 truncate">{o.display_id}</p>
             {o.is_ifood && o.local_order_id != null && (
@@ -458,10 +518,7 @@ export default function AdminStoreOrdersPage() {
     {
       header: 'Status',
       key: 'status',
-      cell: (o) => {
-        const label = statusLabels[o.status] ?? statusLabels[o.status_raw] ?? o.status
-        return <StatusBadge status={o.status} label={label} />
-      },
+      cell: (o) => <StatusBadge status={o.status} />,
     },
     {
       header: 'Valor',
@@ -471,13 +528,9 @@ export default function AdminStoreOrdersPage() {
       ),
     },
     {
-      header: 'Origem',
+      header: 'Etapa',
       key: 'source',
-      cell: (o) => (
-        <div className="flex flex-col gap-1">
-          <SourceBadge source={o.source} />
-        </div>
-      ),
+      cell: (o) => <StatusPipeline status={o.status} />,
     },
     {
       header: 'Data',
@@ -641,7 +694,7 @@ export default function AdminStoreOrdersPage() {
       {/* ── Table ── */}
       {orders.length === 0 ? (
         <EmptyState
-          icon={<ShoppingCart className="h-8 w-8 text-zinc-300" />}
+          icon={<EmptyIcon className="h-8 w-8 text-zinc-300" />}
           title="Nenhum pedido encontrado"
           description="Ajuste os filtros ou aguarde novos pedidos."
           action={

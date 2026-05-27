@@ -1579,6 +1579,47 @@ class IFoodService
     }
     
     /**
+     * Pause merchant on iFood by creating an interruption.
+     */
+    public function pauseMerchant(string $merchantId, ?string $reason = null): bool
+    {
+        $result = $this->httpRequest(
+            'POST',
+            self::API_BASE_URL . "/merchant/v1.0/merchants/{$merchantId}/interruptions",
+            ['description' => $reason ?? 'Pausa programada via MultiMenu'],
+            true
+        );
+        return $result !== null;
+    }
+
+    /**
+     * Resume merchant on iFood by removing all active interruptions.
+     */
+    public function resumeMerchant(string $merchantId): bool
+    {
+        $interruptions = $this->httpRequest(
+            'GET',
+            self::API_BASE_URL . "/merchant/v1.0/merchants/{$merchantId}/interruptions",
+            [],
+            true
+        );
+        if (!is_array($interruptions)) {
+            return true;
+        }
+        foreach ($interruptions as $item) {
+            if (!empty($item['id'])) {
+                $this->httpRequest(
+                    'DELETE',
+                    self::API_BASE_URL . "/merchant/v1.0/merchants/{$merchantId}/interruptions/{$item['id']}",
+                    [],
+                    true
+                );
+            }
+        }
+        return true;
+    }
+
+    /**
      * Get merchant status
      */
     public function getMerchantStatus(string $merchantId): ?array

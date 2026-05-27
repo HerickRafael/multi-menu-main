@@ -13,6 +13,7 @@ declare(strict_types=1);
 // 🚀 Bootstrap centralizado
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../services/ScheduledPauseService.php';
+require_once __DIR__ . '/../services/IFoodService.php';
 
 class AdminPauseController extends Controller
 {
@@ -149,6 +150,7 @@ class AdminPauseController extends Controller
 
         if ($success) {
             $status = $this->pauseService->getPauseStatus($companyId);
+            $this->syncPauseToIfood($company, true, $reason);
             $this->jsonResponse([
                 'success' => true,
                 'message' => 'Pausa ativada com sucesso',
@@ -175,6 +177,7 @@ class AdminPauseController extends Controller
         $success = $this->pauseService->disablePause($companyId);
 
         if ($success) {
+            $this->syncPauseToIfood($company, false);
             $this->jsonResponse([
                 'success' => true,
                 'message' => 'Pausa desativada com sucesso',
@@ -248,6 +251,28 @@ class AdminPauseController extends Controller
                 'success' => false,
                 'message' => 'Erro ao estender pausa'
             ], 500);
+        }
+    }
+
+    /**
+     * Sincroniza pausa com o iFood (best-effort — nunca falha a chamada local).
+     */
+    private function syncPauseToIfood(array $company, bool $isPaused, ?string $reason = null): void
+    {
+        try {
+            $db = db();
+            $ifoodService = new IFoodService($db, (int)$company['id']);
+            $merchantId = $ifoodService->getActiveMerchantId();
+            if (empty($merchantId)) {
+                return;
+            }
+            if ($isPaused) {
+                $ifoodService->pauseMerchant($merchantId, $reason);
+            } else {
+                $ifoodService->resumeMerchant($merchantId);
+            }
+        } catch (\Throwable $e) {
+            // Não propaga — a pausa local já foi salva com sucesso
         }
     }
 

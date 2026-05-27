@@ -5,6 +5,7 @@ declare(strict_types=1);
 // 🚀 Bootstrap centralizado
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../modules/auth/AdminGuard.php';
+require_once __DIR__ . '/../services/ScheduledPauseService.php';
 
 class AdminDashboardController extends Controller
 {
@@ -51,6 +52,8 @@ class AdminDashboardController extends Controller
         if (!$forceLegacy) {
             $primaryColor = admin_theme_primary_color($company);
             $primaryGradient = admin_theme_gradient($company);
+            $pauseService = new ScheduledPauseService($db);
+            $pauseStatus  = $pauseService->getPauseStatus($companyId);
 
             $payload = [
                 'metrics' => [
@@ -103,6 +106,16 @@ class AdminDashboardController extends Controller
                     'financial' => '/admin/' . rawurlencode($slug) . '/financial',
                     'logout' => '/admin/' . rawurlencode($slug) . '/logout',
                     'menu' => '/' . rawurlencode($slug),
+                ],
+                'pause' => [
+                    'status'    => $pauseStatus,
+                    'durations' => ScheduledPauseService::getPredefinedDurations(),
+                    'urls'      => [
+                        'status'  => '/admin/' . rawurlencode($slug) . '/pause/status',
+                        'enable'  => '/admin/' . rawurlencode($slug) . '/pause/enable',
+                        'disable' => '/admin/' . rawurlencode($slug) . '/pause/disable',
+                        'extend'  => '/admin/' . rawurlencode($slug) . '/pause/extend',
+                    ],
                 ],
                 'theme' => [
                     'primaryColor' => $primaryColor,

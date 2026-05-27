@@ -36,6 +36,7 @@ import {
   Utensils,
 } from 'lucide-react'
 
+
 type PauseStatus = {
   is_paused: boolean
   pause_type: 'timed' | 'scheduled' | 'indefinite' | null
@@ -108,58 +109,86 @@ function OrderStatusBadge({ status }: { status: string }) {
   return <Badge className="bg-amber-100 text-amber-700 border border-amber-200 hover:bg-amber-100 font-medium">Pendente</Badge>
 }
 
+const REASON_OPTIONS = [
+  'Alta demanda no momento',
+  'Problemas técnicos temporários',
+  'Preparando pedidos em andamento',
+  'Em manutenção',
+  'Estoque limitado',
+  'Intervalo para descanso',
+]
+
 // ── Pause block ───────────────────────────────────────────────────────────────
 
 function PauseBlock({ pause }: { pause: PauseData }) {
   const [status, setStatus] = useState<PauseStatus>(pause.status)
   const [modalOpen, setModalOpen] = useState(false)
-  const [extendMode, setExtendMode] = useState(false)
+  const [extendOpen, setExtendOpen] = useState(false)
+  const [pauseType, setPauseType] = useState<'timed' | 'scheduled' | 'indefinite'>('timed')
   const [selectedMinutes, setSelectedMinutes] = useState(30)
-  const [reason, setReason] = useState('')
-  const [indefinite, setIndefinite] = useState(false)
+  const [customMinutes, setCustomMinutes] = useState('')
+  const [untilDatetime, setUntilDatetime] = useState('')
+  const [reasonPreset, setReasonPreset] = useState('')
+  const [reasonCustom, setReasonCustom] = useState('')
   const [loading, setLoading] = useState(false)
 
   const durations = pause.durations.length
-    ? pause.durations
+    ? pause.durations.slice(0, 4)
     : [
         { minutes: 15, label: '15 min' },
         { minutes: 30, label: '30 min' },
         { minutes: 60, label: '1 hora' },
         { minutes: 120, label: '2 horas' },
-        { minutes: 180, label: '3 horas' },
       ]
 
-  function openPause() {
-    setExtendMode(false)
-    setIndefinite(false)
-    setReason('')
+  function openPauseModal() {
+    setPauseType('timed')
     setSelectedMinutes(30)
+    setCustomMinutes('')
+    setUntilDatetime('')
+    setReasonPreset('')
+    setReasonCustom('')
     setModalOpen(true)
   }
 
-  function openExtend() {
-    setExtendMode(true)
-    setSelectedMinutes(30)
-    setModalOpen(true)
+  function resolveReason(): string | undefined {
+    const r = reasonCustom.trim() || reasonPreset.trim()
+    return r || undefined
+  }
+
+  function resolveMinutes(): number {
+    if (customMinutes && parseInt(customMinutes) > 0) return parseInt(customMinutes)
+    return selectedMinutes
+  }
+
+  async function post(url: string, body: object) {
+    return fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Csrf-Token': getCsrfToken(),
+      },
+      body: JSON.stringify(body),
+    })
   }
 
   async function handleEnable() {
+    if (pauseType === 'scheduled' && !untilDatetime) {
+      showToast('Informe a data/hora de retomada.', 'error')
+      return
+    }
     setLoading(true)
     try {
-      const res = await fetch(pause.urls.enable, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-Csrf-Token': getCsrfToken(),
-        },
-        body: JSON.stringify({
-          type: indefinite ? 'indefinite' : 'timed',
-          minutes: selectedMinutes,
-          reason: reason.trim() || undefined,
-        }),
-      })
+      const body =
+        pauseType === 'indefinite'
+          ? { type: 'indefinite', reason: resolveReason() }
+          : pauseType === 'scheduled'
+          ? { type: 'scheduled', until: untilDatetime, reason: resolveReason() }
+          : { type: 'timed', minutes: resolveMinutes(), reason: resolveReason() }
+
+      const res = await post(pause.urls.enable, body)
       const j = await res.json().catch(() => null)
       if (j?.success) {
         setStatus(j.data)
@@ -175,24 +204,15 @@ function PauseBlock({ pause }: { pause: PauseData }) {
     }
   }
 
-  async function handleExtend() {
+  async function handleExtend(minutes: number) {
     setLoading(true)
     try {
-      const res = await fetch(pause.urls.extend, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-Csrf-Token': getCsrfToken(),
-        },
-        body: JSON.stringify({ minutes: selectedMinutes }),
-      })
+      const res = await post(pause.urls.extend, { minutes })
       const j = await res.json().catch(() => null)
       if (j?.success) {
         setStatus(j.data)
-        setModalOpen(false)
-        showToast(`Pausa estendida por mais ${selectedMinutes} min.`, 'success')
+        setExtendOpen(false)
+        showToast(`Pausa estendida por mais ${minutes} min.`, 'success')
       } else {
         showToast(j?.message ?? 'Erro ao estender.', 'error')
       }
@@ -206,15 +226,7 @@ function PauseBlock({ pause }: { pause: PauseData }) {
   async function handleDisable() {
     setLoading(true)
     try {
-      const res = await fetch(pause.urls.disable, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-Csrf-Token': getCsrfToken(),
-        },
-      })
+      const res = await post(pause.urls.disable, {})
       const j = await res.json().catch(() => null)
       if (j?.success) {
         setStatus(j.data)
@@ -229,205 +241,246 @@ function PauseBlock({ pause }: { pause: PauseData }) {
     }
   }
 
-  const selectedLabel = durations.find((d) => d.minutes === selectedMinutes)?.label ?? `${selectedMinutes} min`
+  const typeBtn = (type: typeof pauseType, label: string) => (
+    <button
+      type="button"
+      onClick={() => setPauseType(type)}
+      className={[
+        'px-3 py-2 text-sm font-medium rounded-xl border-2 transition',
+        pauseType === type
+          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+      ].join(' ')}
+    >
+      {label}
+    </button>
+  )
 
   return (
     <>
-      {status.is_paused ? (
-        /* ── Paused state ── */
-        <section className="overflow-hidden rounded-2xl shadow-sm">
-          {/* amber gradient strip */}
-          <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-white" />
-              </span>
-              <span className="text-xs font-bold uppercase tracking-widest text-white/90">
-                Loja pausada
-              </span>
+      {/* ── Section card (igual ao PHP) ── */}
+      <section
+        id="scheduled-pause-section"
+        className={[
+          'rounded-2xl border p-5 shadow-sm',
+          status.is_paused
+            ? 'border-amber-300 bg-amber-50'
+            : 'border-slate-200 bg-white',
+        ].join(' ')}
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className={[
+                'inline-flex h-12 w-12 items-center justify-center rounded-xl',
+                status.is_paused ? 'bg-amber-200 text-amber-700' : 'bg-slate-100 text-slate-600',
+              ].join(' ')}
+            >
+              <Pause className="h-5 w-5" />
             </div>
-            <div className="flex gap-2">
-              {status.pause_type !== 'indefinite' && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-                  onClick={openExtend}
-                  disabled={loading}
-                >
-                  <Timer className="mr-1 h-3 w-3" />
-                  Estender
-                </Button>
-              )}
-              <Button
-                type="button"
-                size="sm"
-                className="h-7 bg-white text-amber-700 hover:bg-white/90"
-                onClick={handleDisable}
-                disabled={loading}
-              >
-                <Play className="mr-1 h-3 w-3" />
-                Retomar agora
-              </Button>
-            </div>
-          </div>
-
-          {/* body */}
-          <div className="border border-t-0 border-amber-200 rounded-b-2xl bg-amber-50 px-5 py-4">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 ring-1 ring-amber-200">
-                <Timer className="h-4 w-4 text-amber-700" />
-              </div>
-              <div className="min-w-0 flex-1">
-                {status.remaining_text ? (
-                  <p className="text-sm font-semibold text-amber-900">
-                    Retoma automaticamente em <span className="text-amber-700">{status.remaining_text}</span>
-                  </p>
-                ) : status.pause_type === 'indefinite' ? (
-                  <p className="text-sm font-semibold text-amber-900">
-                    Pausa indefinida — retome manualmente quando estiver pronto
-                  </p>
+            <div>
+              <h3 className="flex items-center gap-2 font-semibold text-slate-900">
+                Pausa Programada
+                {status.is_paused && (
+                  <span className="inline-flex items-center rounded-full bg-amber-200 px-2 py-0.5 text-xs font-medium text-amber-800">
+                    ATIVO
+                  </span>
+                )}
+              </h3>
+              <p className="text-sm text-slate-600">
+                {status.is_paused ? (
+                  status.pause_type === 'indefinite' ? (
+                    <>Loja em pausa indefinida{status.pause_reason ? <> — <em>{status.pause_reason}</em></> : null}</>
+                  ) : (
+                    <>Retorna em: <strong>{status.remaining_text ?? 'Calculando...'}</strong>{status.pause_reason ? <> — <em>{status.pause_reason}</em></> : null}</>
+                  )
                 ) : (
-                  <p className="text-sm font-semibold text-amber-900">Loja com pedidos pausados</p>
+                  'Pause temporariamente o recebimento de pedidos'
                 )}
-                {status.pause_reason && (
-                  <p className="mt-0.5 truncate text-xs text-amber-600">
-                    Motivo: {status.pause_reason}
-                  </p>
-                )}
-              </div>
+              </p>
             </div>
           </div>
-        </section>
-      ) : (
-        /* ── Idle state ── */
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-stretch">
-            {/* left accent */}
-            <div className="w-1 shrink-0 bg-gradient-to-b from-amber-400 to-orange-500" />
 
-            <div className="flex flex-1 flex-wrap items-center justify-between gap-4 px-5 py-4">
-              <div className="flex items-center gap-4">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 ring-1 ring-amber-200">
-                  <Pause className="h-5 w-5 text-amber-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-800">Pausar loja</h3>
-                  <p className="text-sm text-slate-500">
-                    Interrompa pedidos por tempo determinado — iFood incluso
-                  </p>
-                </div>
-              </div>
-
-              <Button
+          <div className="flex flex-wrap items-center gap-2">
+            {status.is_paused ? (
+              <>
+                {status.pause_type !== 'indefinite' && (
+                  <button
+                    type="button"
+                    onClick={() => setExtendOpen(true)}
+                    disabled={loading}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-amber-100 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-200 disabled:opacity-60"
+                  >
+                    <Timer className="h-4 w-4" />
+                    Estender
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleDisable}
+                  disabled={loading}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  <Play className="h-4 w-4" />
+                  Retomar Atendimento
+                </button>
+              </>
+            ) : (
+              <button
                 type="button"
-                className="shrink-0 bg-amber-600 text-white shadow-sm hover:bg-amber-700 gap-1.5"
-                onClick={openPause}
+                onClick={openPauseModal}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-700"
               >
-                <Pause className="h-3.5 w-3.5" />
-                Pausar agora
-              </Button>
-            </div>
+                <Pause className="h-4 w-4" />
+                Pausar Loja
+              </button>
+            )}
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
-      {/* ── Modal ── */}
+      {/* ── Modal principal: Pausar ── */}
       <AlertDialog open={modalOpen} onOpenChange={setModalOpen}>
-        <AlertDialogContent className="max-w-[360px] gap-0 overflow-hidden rounded-2xl p-0">
-          {/* Header strip */}
-          <div className="flex flex-col items-center gap-2 bg-gradient-to-br from-amber-500 to-orange-500 px-6 py-5 text-white">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 ring-1 ring-white/30">
-              {extendMode
-                ? <Timer className="h-6 w-6" />
-                : <Pause className="h-6 w-6" />}
-            </div>
-            <AlertDialogTitle className="text-base font-semibold text-white">
-              {extendMode ? 'Estender pausa' : 'Pausar loja'}
+        <AlertDialogContent className="max-w-md gap-0 overflow-hidden rounded-2xl p-0">
+          {/* Header âmbar claro */}
+          <div className="border-b border-amber-100 bg-amber-50 px-6 py-4">
+            <AlertDialogTitle className="flex items-center gap-2 text-lg font-semibold text-amber-900">
+              <Pause className="h-5 w-5" />
+              Pausar Recebimento de Pedidos
             </AlertDialogTitle>
-            <p className="text-center text-xs text-white/80">
-              {extendMode
-                ? 'Quanto tempo a mais deseja pausar?'
-                : 'Por quanto tempo parar de receber pedidos?'}
-            </p>
+            <p className="mt-1 text-sm text-amber-700">Controle quando sua loja aceita novos pedidos</p>
           </div>
 
           {/* Body */}
-          <div className="space-y-4 px-6 py-5">
-            {/* Duration grid */}
-            <div className="grid grid-cols-3 gap-2">
-              {durations.map((d) => (
-                <button
-                  key={d.minutes}
-                  type="button"
-                  disabled={indefinite}
-                  onClick={() => setSelectedMinutes(d.minutes)}
-                  className={[
-                    'rounded-xl border py-2 text-center text-sm font-medium transition-all',
-                    selectedMinutes === d.minutes && !indefinite
-                      ? 'border-amber-500 bg-amber-50 text-amber-800 shadow-sm ring-1 ring-amber-300'
-                      : 'border-slate-200 text-slate-600 hover:border-amber-300 hover:bg-amber-50/50',
-                    indefinite ? 'pointer-events-none opacity-35' : '',
-                  ].join(' ')}
-                >
-                  {d.label}
-                </button>
-              ))}
+          <div className="p-6 space-y-4">
+            {/* Tipo de pausa */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Tipo de Pausa</label>
+              <div className="grid grid-cols-3 gap-2">
+                {typeBtn('timed', 'Temporizada')}
+                {typeBtn('scheduled', 'Até horário')}
+                {typeBtn('indefinite', 'Manual')}
+              </div>
             </div>
 
-            {!extendMode && (
-              <>
-                {/* Indefinite toggle */}
-                <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5 transition hover:bg-slate-50">
-                  <div className="flex items-center gap-2.5 text-sm text-slate-700">
-                    <Timer className="h-4 w-4 text-slate-400" />
-                    Pausa indefinida
-                  </div>
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-amber-600"
-                    checked={indefinite}
-                    onChange={(e) => setIndefinite(e.target.checked)}
-                  />
-                </label>
-
-                {/* Reason */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-500">Motivo (opcional)</label>
-                  <input
-                    type="text"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Ex: Muito movimento, aguarde…"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
-                  />
+            {/* Duração (timed) */}
+            {pauseType === 'timed' && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Duração</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {durations.map((d) => (
+                    <button
+                      key={d.minutes}
+                      type="button"
+                      onClick={() => { setSelectedMinutes(d.minutes); setCustomMinutes('') }}
+                      className={[
+                        'rounded-xl border px-3 py-2 text-sm font-medium transition',
+                        selectedMinutes === d.minutes && !customMinutes
+                          ? 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700'
+                          : 'border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50',
+                      ].join(' ')}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
                 </div>
-              </>
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={customMinutes}
+                  onChange={(e) => setCustomMinutes(e.target.value)}
+                  placeholder="Minutos personalizados"
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
             )}
+
+            {/* Até horário (scheduled) */}
+            {pauseType === 'scheduled' && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Retomar em</label>
+                <input
+                  type="datetime-local"
+                  value={untilDatetime}
+                  onChange={(e) => setUntilDatetime(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+            )}
+
+            {/* Indefinido */}
+            {pauseType === 'indefinite' && (
+              <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                A loja permanecerá pausada até você retomar manualmente.
+              </div>
+            )}
+
+            {/* Motivo */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Motivo (opcional)</label>
+              <select
+                value={reasonPreset}
+                onChange={(e) => { setReasonPreset(e.target.value); setReasonCustom('') }}
+                className="mb-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="">Selecione ou digite abaixo...</option>
+                {REASON_OPTIONS.map((o) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={reasonCustom}
+                onChange={(e) => { setReasonCustom(e.target.value); setReasonPreset('') }}
+                placeholder="Ou digite um motivo personalizado..."
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
           </div>
 
           {/* Footer */}
-          <AlertDialogFooter className="flex gap-2 border-t border-slate-100 px-6 py-4">
-            <AlertDialogCancel disabled={loading} className="flex-1">
-              Cancelar
-            </AlertDialogCancel>
+          <AlertDialogFooter className="justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <AlertDialogCancel disabled={loading}>Cancelar</AlertDialogCancel>
             <Button
               type="button"
-              className="flex-1 bg-amber-600 text-white hover:bg-amber-700"
+              className="bg-amber-600 text-white hover:bg-amber-700"
               disabled={loading}
-              onClick={extendMode ? handleExtend : handleEnable}
+              onClick={handleEnable}
             >
-              {loading
-                ? 'Salvando…'
-                : extendMode
-                ? `+ ${selectedLabel}`
-                : indefinite
-                ? 'Pausar'
-                : `Pausar ${selectedLabel}`}
+              {loading ? 'Salvando…' : 'Ativar Pausa'}
             </Button>
           </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Modal de estender ── */}
+      <AlertDialog open={extendOpen} onOpenChange={setExtendOpen}>
+        <AlertDialogContent className="max-w-sm gap-0 overflow-hidden rounded-2xl p-0">
+          <div className="border-b border-amber-100 bg-amber-50 px-6 py-4">
+            <AlertDialogTitle className="text-lg font-semibold text-amber-900">
+              Estender Pausa
+            </AlertDialogTitle>
+          </div>
+          <div className="p-6">
+            <label className="mb-2 block text-sm font-medium text-slate-700">Adicionar mais tempo</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[15, 30, 60].map((min) => (
+                <button
+                  key={min}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => handleExtend(min)}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium transition hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-60"
+                >
+                  +{min < 60 ? `${min} min` : '1 hora'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <AlertDialogCancel disabled={loading}>Cancelar</AlertDialogCancel>
+          </div>
         </AlertDialogContent>
       </AlertDialog>
     </>

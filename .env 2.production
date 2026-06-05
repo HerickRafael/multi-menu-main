@@ -1,0 +1,49 @@
+# Configuração de variáveis de ambiente para produção
+# Copie este arquivo para .env e preencha com valores reais
+
+# ===== BANCO DE DADOS =====
+MYSQL_ROOT_PASSWORD=
+MYSQL_DATABASE=multi_menu
+MYSQL_USER=root
+MYSQL_PASSWORD=
+
+# Aliases para compatibilidade
+DB_NAME=multi_menu
+DB_USER=root
+DB_PASS=
+# ===== APLICAÇÃO =====
+APP_ENV=production
+APP_URL=http://localhost:8000/
+APP_DEBUG=false
+# JWT/API e sessão: mínimo 32 caracteres (openssl rand -base64 32)
+JWT_SECRET=
+APP_KEY=
+# Webhooks: enviar X-Webhook-Secret ou Authorization: Bearer com o mesmo valor
+WEBHOOK_EVOLUTION_SECRET=
+WEBHOOK_IFOOD_SECRET=
+# Worker interno (cron): header X-Webhook-Internal — ver scripts/webhook_queue_worker.php
+WEBHOOK_INTERNAL_SECRET=
+# CSP: 0 desativa política injetada por index.php (apenas se algo quebrar no front)
+STRICT_CSP=1
+# Política customizada (opcional; sobrescreve o padrão quando não vazia)
+# CONTENT_SECURITY_POLICY=
+
+# ===== SSL/DOMÍNIO =====
+DOMAIN=localhost:8000/
+LETSENCRYPT_ENABLED=false
+LETSENCRYPT_EMAIL=contato@wollburger.online
+
+
+# ===== NGINX PROXY MANAGER =====
+# Usuário padrão inicial: admin@example.com / changeme
+# IMPORTANTE: Trocar na primeira vez que acessar http://seu-ip:81
+NPM_ADMIN_EMAIL=admin@wollburger.online
+
+# ===== SEGURANÇA =====
+# Gerar chaves com: openssl rand -base64 32
+SECRET_KEY=sua_chave_secreta_aqui_32_caracteres
+ENCRYPTION_KEY=outra_chave_secreta_aqui_32_caracteres
+
+# ===== BACKUP (opcional) =====
+BACKUP_ENABLED=true
+BACKUP_RETENTION_DAYS=7

@@ -98,7 +98,10 @@ class PaymentMethod
             return $id;
         }
 
-        $st = db()->prepare(
+        // Capturar a conexão localmente: lastInsertId() precisa ser lido no
+        // mesmo handle do INSERT (chamar db() de novo pode retornar 0).
+        $pdo = db();
+        $st = $pdo->prepare(
             'INSERT INTO payment_methods (company_id, name, instructions, sort_order, active, `type`, `meta`, icon, pix_key)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
@@ -114,7 +117,7 @@ class PaymentMethod
             $data['pix_key'] ?? null,
         ]);
 
-        $id = (int)db()->lastInsertId();
+        $id = (int)$pdo->lastInsertId();
         
         // Invalidar cache
         SmartCache::forgetByPattern("payment_methods:company:{$data['company_id']}:*");

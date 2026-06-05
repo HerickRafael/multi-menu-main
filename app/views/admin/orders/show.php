@@ -105,13 +105,24 @@ $displayInstructions = !empty($pmInstructions) ? $pmInstructions : $notesInstruc
 
 // labels e cores de status
 $statusLabels = [
-  'pending'   => 'Pendente',
+  'pending'   => 'Novo',
+  'paid'      => 'Saiu para Entrega',
   'completed' => 'Concluído',
   'canceled'  => 'Cancelado',
 ];
 $st = (string)($o['status'] ?? 'pending');
 $orderSource = $o['source'] ?? 'manual';
 $canEdit = $st === 'pending' && $orderSource !== 'ifood';
+
+// Progresso do pedido
+$progressSteps = [
+  ['key' => 'pending',   'label' => 'Novo'],
+  ['key' => 'paid',      'label' => "Saiu p/<br>Entrega"],
+  ['key' => 'completed', 'label' => 'Concluído'],
+];
+$progressStepOrder = ['pending' => 0, 'paid' => 1, 'completed' => 2];
+$currentStepIdx = $progressStepOrder[$st] ?? -1;
+$totalProgressSteps = count($progressSteps);
 
 $orderEvents = $orderEvents ?? [];
 $historyEvents = array_values(array_filter($orderEvents, static function ($event) {
@@ -385,37 +396,128 @@ $actions[] = [
 <div class="mx-auto max-w-6xl p-4 admin-screen-only">
   <?php include __DIR__ . '/../components/page-header.php'; ?>
 
-  <!-- META: Status, Origem e Data -->
-  <div class="mb-4 flex flex-wrap items-center gap-2 text-sm">
-    <?= status_pill($st, $statusLabels[$st] ?? ucfirst($st)) ?>
-    <?php if ($orderSource === 'ifood'): ?>
-      <span class="inline-flex items-center gap-1 rounded-lg bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
-        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-        </svg>
-        iFood
-      </span>
-    <?php elseif ($orderSource === 'website'): ?>
-      <span class="inline-flex items-center gap-1 rounded-lg bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
-        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-        </svg>
-        Site
-      </span>
+  <!-- PROGRESSO + AÇÕES -->
+  <div class="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <p class="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">Progresso do Pedido</p>
+
+    <?php if ($st === 'canceled'): ?>
+      <div class="mb-5 flex items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+          <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
+          Cancelado
+        </span>
+        <span class="text-xs text-slate-400">Este pedido foi cancelado.</span>
+      </div>
     <?php else: ?>
-      <span class="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-          <circle cx="8.5" cy="7" r="4"/>
-          <path d="M20 8v6M23 11h-6"/>
-        </svg>
-        Manual
-      </span>
+      <div class="relative flex items-start justify-between mb-6">
+        <!-- trilho fundo -->
+        <div class="absolute inset-x-2.5 top-2.5 h-px bg-slate-200"></div>
+        <!-- trilho progresso -->
+        <?php if ($currentStepIdx > 0): ?>
+          <div class="absolute left-2.5 top-2.5 h-px" style="width:calc((100% - 20px) * <?= $currentStepIdx / ($totalProgressSteps - 1) ?>); background-color:var(--admin-primary-color,#6366f1);"></div>
+        <?php endif; ?>
+        <!-- etapas -->
+        <?php foreach ($progressSteps as $step):
+          $sIdx  = $progressStepOrder[$step['key']];
+          $sDone = $currentStepIdx > $sIdx;
+          $sAct  = $currentStepIdx === $sIdx;
+        ?>
+          <div class="relative z-10 flex flex-col items-center gap-2">
+            <div class="flex h-5 w-5 items-center justify-center rounded-full border-2 bg-white transition-colors"
+                 style="<?= $sDone ? 'border-color:var(--admin-primary-color,#6366f1);background-color:var(--admin-primary-color,#6366f1);' : ($sAct ? 'border-color:var(--admin-primary-color,#6366f1);' : 'border-color:#cbd5e1;') ?>">
+              <?php if ($sDone): ?>
+                <svg class="h-2.5 w-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 7 9 18l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <?php elseif ($sAct): ?>
+                <div class="h-2 w-2 rounded-full" style="background-color:var(--admin-primary-color,#6366f1);"></div>
+              <?php endif; ?>
+            </div>
+            <span class="max-w-[72px] text-center text-[11px] font-medium leading-tight <?= $sAct ? 'text-slate-900' : ($sDone ? 'text-slate-500' : 'text-slate-400') ?>">
+              <?= $step['label'] ?>
+            </span>
+          </div>
+        <?php endforeach; ?>
+      </div>
     <?php endif; ?>
-    <?php if (!empty($o['created_at'])): ?>
-      <span class="ml-auto text-xs text-slate-500">Criado em: <?= e($o['created_at']) ?></span>
+
+    <!-- Botões de ação rápida -->
+    <?php if ($orderSource !== 'ifood' && in_array($st, ['pending', 'paid'], true)): ?>
+      <div class="flex flex-wrap items-center gap-2 mb-4">
+        <?php if ($st === 'pending'): ?>
+          <form method="post" action="<?= e(base_url('admin/' . $slug . '/orders/setStatus')) ?>">
+            <?php if (function_exists('csrf_field')): echo csrf_field(); elseif (function_exists('csrf_token')): ?><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><?php endif; ?>
+            <input type="hidden" name="id" value="<?= (int)($o['id'] ?? 0) ?>">
+            <input type="hidden" name="status" value="paid">
+            <button type="submit" class="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:opacity-90" style="background-color:var(--admin-primary-color,#6366f1);">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h5l2 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+              Saiu para Entrega
+            </button>
+          </form>
+        <?php endif; ?>
+        <form method="post" action="<?= e(base_url('admin/' . $slug . '/orders/setStatus')) ?>">
+          <?php if (function_exists('csrf_field')): echo csrf_field(); elseif (function_exists('csrf_token')): ?><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><?php endif; ?>
+          <input type="hidden" name="id" value="<?= (int)($o['id'] ?? 0) ?>">
+          <input type="hidden" name="status" value="completed">
+          <button type="submit"
+            class="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition <?= $st === 'paid' ? 'text-white hover:opacity-90' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' ?>"
+            <?= $st === 'paid' ? 'style="background-color:var(--admin-primary-color,#6366f1);"' : '' ?>>
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 7 9 18l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Concluído
+          </button>
+        </form>
+        <?php if ($canEdit): ?>
+          <a href="<?= e(base_url('admin/' . $slug . '/orders/' . $orderId . '/edit')) ?>"
+             class="ml-auto inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 20h4l10-10-4-4L4 16v4Z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Editar Pedido
+          </a>
+        <?php endif; ?>
+      </div>
     <?php endif; ?>
+
+    <!-- Bloco de mudança de status -->
+    <div class="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+      <form method="post" action="<?= e(base_url('admin/' . $slug . '/orders/setStatus')) ?>" class="flex flex-wrap items-center gap-2">
+        <?php if (function_exists('csrf_field')): echo csrf_field(); elseif (function_exists('csrf_token')): ?><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><?php endif; ?>
+        <input type="hidden" name="id" value="<?= (int)($o['id'] ?? 0) ?>">
+        <span class="shrink-0 text-xs text-slate-500">Mudar status:</span>
+        <select name="status" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-1">
+          <?php foreach ($statusLabels as $k => $label): ?>
+            <option value="<?= e($k) ?>" <?= $st === $k ? 'selected' : '' ?>><?= e($label) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <button type="submit" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 transition">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7 9 18l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Aplicar
+        </button>
+      </form>
+      <div class="ml-auto flex flex-wrap items-center gap-3 text-xs">
+        <?= status_pill($st, $statusLabels[$st] ?? ucfirst($st)) ?>
+        <?php if ($orderSource === 'ifood'): ?>
+          <span class="inline-flex items-center gap-1 rounded-lg bg-red-100 px-2 py-1 font-semibold text-red-700">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            iFood
+          </span>
+        <?php elseif ($orderSource === 'website'): ?>
+          <span class="inline-flex items-center gap-1 rounded-lg bg-blue-100 px-2 py-1 font-semibold text-blue-700">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            Site
+          </span>
+        <?php elseif ($orderSource === 'whatsapp'): ?>
+          <span class="inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 20l1.5-4.5a7 7 0 1 1 2.5 2.5L7 20z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            WhatsApp
+          </span>
+        <?php else: ?>
+          <span class="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 font-medium text-slate-600">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+            Manual
+          </span>
+        <?php endif; ?>
+        <?php if (!empty($o['created_at'])): ?>
+          <span class="text-slate-400"><?= e($o['created_at']) ?></span>
+        <?php endif; ?>
+      </div>
+    </div>
   </div>
 
   <!-- CARDS: Cliente & Resumo -->
@@ -457,25 +559,6 @@ $actions[] = [
         <div class="text-sm text-slate-600">Total</div>
         <div class="text-xl font-semibold text-slate-900">R$ <?= number_format((float)($o['total'] ?? 0), 2, ',', '.') ?></div>
       </div>
-      <form method="post" action="<?= e(base_url('admin/' . $slug . '/orders/setStatus')) ?>"
-            class="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-        <?php if (function_exists('csrf_field')): ?>
-          <?= csrf_field() ?>
-        <?php elseif (function_exists('csrf_token')): ?>
-          <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-        <?php endif; ?>
-        <input type="hidden" name="id" value="<?= (int)($o['id'] ?? 0) ?>">
-        <label class="text-xs font-medium text-slate-600">Atualizar status:</label>
-        <select name="status" class="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:ring-2 focus:ring-indigo-400">
-          <?php foreach ($statusLabels as $k => $label): ?>
-            <option value="<?= e($k) ?>" <?= ($o['status'] ?? '') === $k ? 'selected' : '' ?>><?= e($label) ?></option>
-          <?php endforeach; ?>
-        </select>
-        <button class="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm hover:bg-slate-50">
-          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M20 7 9 18l-5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Aplicar
-        </button>
-      </form>
       <?php if (!empty($paymentMethodName)): ?>
         <div class="mt-2 flex items-center gap-2">
           <?php if ($pmBrandIcon): ?>

@@ -36,7 +36,8 @@ class DeliveryZone
     /** Cria uma zona (bairro) vinculada à cidade */
     public static function create(array $data): int
     {
-        $st = db()->prepare(
+        $pdo = db();
+        $st = $pdo->prepare(
             'INSERT INTO delivery_zones (company_id, city_id, neighborhood, fee)
        VALUES (?, ?, ?, ?)'
         );
@@ -47,7 +48,7 @@ class DeliveryZone
           $data['fee'],
         ]);
 
-        return (int)db()->lastInsertId();
+        return (int)$pdo->lastInsertId();
     }
 
     /** Busca uma zona específica da empresa (inclui city_name) */

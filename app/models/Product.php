@@ -98,7 +98,7 @@ class Product
         $key = "products:company:{$companyId}:{$activeStr}:{$qStr}:{$feeStr}";
         
         return SmartCache::remember($key, function() use ($companyId, $q, $onlyActive, $applyFee) {
-            $sql = 'SELECT * FROM products WHERE company_id = ?';
+            $sql = 'SELECT * FROM products WHERE company_id = ? AND deleted_at IS NULL';
             $args = [$companyId];
 
             if ($onlyActive) {
@@ -330,8 +330,9 @@ class Product
     /** Produto garantido por empresa (útil para rotas públicas /{empresa}/produto/{id}) */
     public static function findByCompanyAndId(int $companyId, int $productId): ?array
     {
+        // MySQL 8 (strict) rejeita o literal '0000-00-00 00:00:00'; basta IS NULL.
         $sql = "SELECT * FROM products
-            WHERE company_id = ? AND id = ? AND (deleted_at IS NULL OR deleted_at='0000-00-00 00:00:00')";
+            WHERE company_id = ? AND id = ? AND deleted_at IS NULL";
         $st = db()->prepare($sql);
         $st->execute([$companyId, $productId]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
@@ -429,6 +430,24 @@ class Product
         // Se preferir soft delete, troque por update de deleted_at.
         $st = db()->prepare('DELETE FROM products WHERE id=?');
         $st->execute([$id]);
+    }
+
+    /**
+     * Soft delete: marca deleted_at em vez de apagar.
+     * Necessário porque a FK order_items->products é ON DELETE CASCADE — um
+     * hard delete destruiria o histórico de pedidos. Retorna true se removeu.
+     */
+    public static function softDelete(int $companyId, int $id): bool
+    {
+        require_once __DIR__ . '/../services/ProductCache.php';
+        $cache = ProductCache::instance();
+        $cache->invalidateProduct($id);
+        $cache->invalidateCombosContainingProduct($id);
+
+        $st = db()->prepare('UPDATE products SET deleted_at = NOW() WHERE id = ? AND company_id = ? AND deleted_at IS NULL');
+        $st->execute([$id, $companyId]);
+
+        return $st->rowCount() > 0;
     }
 
     /* ========================

@@ -33,6 +33,32 @@ class Company
         return array_values(array_unique($candidates));
     }
 
+    /**
+     * Cores de tema da loja para o app mobile herdar a identidade visual,
+     * espelhando exatamente o que o PWA usa (colunas menu_*_color + theme_color).
+     * Retorna null para colunas ausentes/vazias (o cliente aplica o fallback).
+     */
+    public static function themeColors(array $row): array
+    {
+        $keys = [
+            'theme_color',
+            'menu_header_bg_color',
+            'menu_header_text_color',
+            'menu_header_button_color',
+            'menu_logo_border_color',
+            'menu_group_title_bg_color',
+            'menu_group_title_text_color',
+            'menu_welcome_bg_color',
+            'menu_welcome_text_color',
+        ];
+        $theme = [];
+        foreach ($keys as $k) {
+            $v = $row[$k] ?? null;
+            $theme[$k] = ($v === null || $v === '') ? null : (string) $v;
+        }
+        return $theme;
+    }
+
     /** Busca empresa pelo slug (url amigável) */
     public static function findBySlug(string $slug): ?array
     {
@@ -153,6 +179,50 @@ class Company
         }
         if ($previous) {
             foreach (self::slugCandidates((string)($previous['slug'] ?? '')) as $candidate) {
+                SmartCache::forget('company:slug:' . strtolower($candidate));
+                SmartCache::forget('company:slug:' . $candidate);
+            }
+        }
+        SmartCache::forgetByPattern('companies:*');
+    }
+
+    /**
+     * Atualiza campos de configuração da loja (apenas os presentes em $data),
+     * invalidando o cache para que findBySlug/find retornem o valor novo.
+     */
+    public static function updateSettings(int $id, array $data): void
+    {
+        $allowed = [
+            'name', 'whatsapp', 'address', 'min_order', 'logo', 'banner',
+            'avg_delivery_min_from', 'avg_delivery_min_to',
+            'delivery_free_enabled', 'delivery_free_min_value', 'delivery_after_hours_fee',
+            'menu_header_text_color', 'menu_header_button_color', 'menu_header_bg_color',
+            'menu_logo_border_color', 'menu_group_title_bg_color', 'menu_group_title_text_color',
+            'menu_welcome_bg_color', 'menu_welcome_text_color',
+        ];
+
+        $sets = [];
+        $args = [];
+        foreach ($allowed as $col) {
+            if (array_key_exists($col, $data)) {
+                $sets[] = "$col = ?";
+                $args[] = $data[$col];
+            }
+        }
+        if (!$sets) {
+            return;
+        }
+
+        $previous = self::find($id);
+
+        // Tabela companies não possui updated_at neste schema.
+        $args[] = $id;
+        db()->prepare('UPDATE companies SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute($args);
+
+        // Invalidação de cache (id + slug atual).
+        SmartCache::forget("company:id:{$id}");
+        if ($previous) {
+            foreach (self::slugCandidates((string) ($previous['slug'] ?? '')) as $candidate) {
                 SmartCache::forget('company:slug:' . strtolower($candidate));
                 SmartCache::forget('company:slug:' . $candidate);
             }

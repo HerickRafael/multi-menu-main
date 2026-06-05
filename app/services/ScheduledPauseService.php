@@ -35,10 +35,12 @@ class ScheduledPauseService
         ];
 
         try {
+            // Busca todas as colunas de uma vez: SHOW ... LIKE ? falha com
+            // prepared statements nativos (EMULATE_PREPARES=false).
+            $existing = $this->db->query('SHOW COLUMNS FROM companies')
+                ->fetchAll(\PDO::FETCH_COLUMN, 0);
             foreach ($requiredColumns as $column) {
-                $st = $this->db->prepare('SHOW COLUMNS FROM companies LIKE ?');
-                $st->execute([$column]);
-                if (!$st->fetch(\PDO::FETCH_ASSOC)) {
+                if (!in_array($column, $existing, true)) {
                     $this->hasPauseColumns = false;
 
                     return false;

@@ -159,7 +159,7 @@ class ApiSecurity
                 $request = [
                     'method' => $_SERVER['REQUEST_METHOD'] ?? 'GET',
                     'uri' => $_SERVER['REQUEST_URI'] ?? '/',
-                    'headers' => getallheaders() ?: [],
+                    'headers' => $this->collectHeaders(),
                     'ip' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
                     'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
                     'body' => file_get_contents('php://input'),
@@ -236,6 +236,48 @@ class ApiSecurity
      * @return array Authentication data
      * @throws Exception On authentication failure
      */
+    /**
+     * Coleta os headers da requisição com acesso case-insensitive.
+     *
+     * Necessário porque clientes como Dart/Flutter enviam o nome do header em
+     * minúsculas (ex.: "authorization"), e as checagens deste middleware usam
+     * a forma canônica (ex.: "Authorization"); chaves de array em PHP são
+     * case-sensitive. Aqui garantimos a forma canônica quando existir qualquer
+     * variação de caixa.
+     */
+    private function collectHeaders(): array
+    {
+        $raw = function_exists('getallheaders') ? (getallheaders() ?: []) : [];
+        $headers = $raw;
+        $lower = array_change_key_case($raw, CASE_LOWER);
+
+        $canonical = [
+            'Authorization' => 'authorization',
+            'X-API-Key'     => 'x-api-key',
+            'X-Signature'   => 'x-signature',
+            'X-API-Version' => 'x-api-version',
+            'Origin'        => 'origin',
+            'Content-Type'  => 'content-type',
+        ];
+        foreach ($canonical as $proper => $low) {
+            if (!isset($headers[$proper]) && isset($lower[$low])) {
+                $headers[$proper] = $lower[$low];
+            }
+        }
+
+        // Fallback extra: alguns setups expõem só em $_SERVER.
+        if (!isset($headers['Authorization'])) {
+            $fromServer = $_SERVER['HTTP_AUTHORIZATION']
+                ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+                ?? null;
+            if ($fromServer) {
+                $headers['Authorization'] = $fromServer;
+            }
+        }
+
+        return $headers;
+    }
+
     private function authenticate(array $request): array
     {
         $method = $this->detectAuthMethod($request);

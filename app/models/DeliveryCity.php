@@ -59,10 +59,11 @@ class DeliveryCity
     /** Cria cidade */
     public static function create(array $data): int
     {
-        $st = db()->prepare('INSERT INTO delivery_cities (company_id, name) VALUES (?, ?)');
+        $pdo = db();
+        $st = $pdo->prepare('INSERT INTO delivery_cities (company_id, name) VALUES (?, ?)');
         $st->execute([(int)$data['company_id'], $data['name']]);
 
-        return (int)db()->lastInsertId();
+        return (int)$pdo->lastInsertId();
     }
 
     /** Atualiza cidade */

@@ -40,10 +40,13 @@ class Category
     
     public static function create(array $data): int
     {
-        $st = db()->prepare('INSERT INTO categories (company_id, name, sort_order, active) VALUES (?,?,?,?)');
+        // Capturar a conexão localmente: lastInsertId() precisa ser lido no
+        // mesmo handle do INSERT (chamar db() de novo pode retornar 0).
+        $pdo = db();
+        $st = $pdo->prepare('INSERT INTO categories (company_id, name, sort_order, active) VALUES (?,?,?,?)');
         $st->execute([$data['company_id'], $data['name'], (int)($data['sort_order'] ?? 0), (int)($data['active'] ?? 1)]);
-        
-        $id = (int)db()->lastInsertId();
+
+        $id = (int)$pdo->lastInsertId();
         
         // Invalidar cache da empresa
         SmartCache::forgetByPattern("categories:company:{$data['company_id']}:*");

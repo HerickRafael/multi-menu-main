@@ -95,6 +95,13 @@ $router->post('/api/{slug}/orders/{id}',         'ApiController@updateOrder')->n
 $router->delete('/api/{slug}/orders/{id}',       'ApiController@deleteOrder')->name('api.orders.delete');
 $router->get('/api/{slug}/orders/{id}/receipt',  'ApiController@getReceipt')->name('api.orders.receipt');
 
+// Clientes (app mobile)
+$router->get('/api/{slug}/customers',            'ApiController@getCustomers')->name('api.customers.index');
+$router->get('/api/{slug}/customers/{id}',       'ApiController@getCustomer')->name('api.customers.show');
+$router->post('/api/{slug}/customers',           'ApiController@createCustomer')->name('api.customers.store');
+$router->post('/api/{slug}/customers/{id}',      'ApiController@updateCustomer')->name('api.customers.update');
+$router->delete('/api/{slug}/customers/{id}',    'ApiController@deleteCustomer')->name('api.customers.delete');
+
 // Machine Learning - Tracking de interações
 $router->post('/api/{slug}/track-interaction',   'ApiController@trackInteraction')->name('api.track_interaction');
 

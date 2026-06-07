@@ -2048,6 +2048,158 @@ class ApiController extends Controller
         ]);
     }
 
+    /** Curadoria de um cliente para a API mobile (tipos/nomes consistentes). */
+    private function curateCustomer(array $c): array
+    {
+        return [
+            'id'            => (int) $c['id'],
+            'name'          => $c['name'] ?? null,
+            'whatsapp'      => $c['whatsapp'] ?? null,
+            'whatsapp_e164' => $c['whatsapp_e164'] ?? null,
+            'email'         => $c['email'] ?? null,
+            'cpf'           => $c['cpf'] ?? null,
+            'notes'         => $c['notes'] ?? null,
+            'created_at'    => $c['created_at'] ?? null,
+            'last_login_at' => $c['last_login_at'] ?? null,
+        ];
+    }
+
+    /** Carrega um cliente garantindo posse pela empresa (ou 404). */
+    private function authorizeCustomer($id): ?array
+    {
+        require_once __DIR__ . '/../models/Customer.php';
+        $c = Customer::findByCompanyAndId((int) $this->company['id'], (int) $id);
+        if (!$c) {
+            $this->sendError('Cliente não encontrado', 404);
+            return null;
+        }
+        return $c;
+    }
+
+    /** GET /api/{slug}/customers?search=&limit=&offset= */
+    public function getCustomers($params): void
+    {
+        $this->loadCompany($params['slug'] ?? '');
+        require_once __DIR__ . '/../models/Customer.php';
+
+        $companyId = (int) $this->company['id'];
+        $search = isset($_GET['search']) ? trim((string) $_GET['search']) : null;
+        $limit = min((int) ($_GET['limit'] ?? 50), 100);
+        $offset = max((int) ($_GET['offset'] ?? 0), 0);
+
+        $items = array_map(
+            [$this, 'curateCustomer'],
+            Customer::listByCompany($companyId, $search ?: null, $limit, $offset)
+        );
+
+        $this->sendResponse([
+            'customers' => $items,
+            'total'     => Customer::countByCompany($companyId, $search ?: null),
+            'limit'     => $limit,
+            'offset'    => $offset,
+        ]);
+    }
+
+    /** GET /api/{slug}/customers/{id} */
+    public function getCustomer($params): void
+    {
+        $this->loadCompany($params['slug'] ?? '');
+        $c = $this->authorizeCustomer($params['id'] ?? 0);
+        if ($c === null) return;
+        $this->sendResponse(['customer' => $this->curateCustomer($c)]);
+    }
+
+    /** POST /api/{slug}/customers  Body: { name, whatsapp } */
+    public function createCustomer($params): void
+    {
+        $this->loadCompany($params['slug'] ?? '');
+        require_once __DIR__ . '/../models/Customer.php';
+        $companyId = (int) $this->company['id'];
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($input)) {
+            $this->sendError('Dados JSON inválidos', 400);
+            return;
+        }
+        $name = trim((string) ($input['name'] ?? ''));
+        $whatsapp = trim((string) ($input['whatsapp'] ?? ''));
+        if ($name === '') {
+            $this->sendError('Nome é obrigatório', 400);
+            return;
+        }
+        if ($whatsapp === '') {
+            $this->sendError('WhatsApp é obrigatório', 400);
+            return;
+        }
+
+        $e164 = normalizePhone($whatsapp);
+        // Evita duplicar cliente com o mesmo telefone na loja.
+        if (Customer::findByCompanyAndE164($companyId, $e164)) {
+            $this->sendError('Já existe um cliente com esse WhatsApp', 409);
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $id = Customer::insert([
+            'company_id'    => $companyId,
+            'name'          => $name,
+            'whatsapp'      => $whatsapp,
+            'whatsapp_e164' => $e164,
+            'created_at'    => $now,
+            'updated_at'    => $now,
+            'last_login_at' => $now, // coluna NOT NULL; usa o momento do cadastro
+        ]);
+
+        $this->sendResponse(
+            ['message' => 'Cliente criado', 'customer' => $this->curateCustomer(Customer::findByCompanyAndId($companyId, $id))],
+            201
+        );
+    }
+
+    /** POST /api/{slug}/customers/{id}  (edição) */
+    public function updateCustomer($params): void
+    {
+        $this->loadCompany($params['slug'] ?? '');
+        require_once __DIR__ . '/../models/Customer.php';
+        $companyId = (int) $this->company['id'];
+
+        $c = $this->authorizeCustomer($params['id'] ?? 0);
+        if ($c === null) return;
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $name = trim((string) ($input['name'] ?? $c['name']));
+        $whatsapp = trim((string) ($input['whatsapp'] ?? $c['whatsapp']));
+        if ($name === '') {
+            $this->sendError('Nome não pode ser vazio', 400);
+            return;
+        }
+
+        Customer::updateById((int) $c['id'], [
+            'name'          => $name,
+            'whatsapp'      => $whatsapp,
+            'whatsapp_e164' => normalizePhone($whatsapp),
+            'updated_at'    => date('Y-m-d H:i:s'),
+            'last_login_at' => $c['last_login_at'] ?? null,
+        ]);
+
+        $this->sendResponse([
+            'message'  => 'Cliente atualizado',
+            'customer' => $this->curateCustomer(Customer::findByCompanyAndId($companyId, (int) $c['id'])),
+        ]);
+    }
+
+    /** DELETE /api/{slug}/customers/{id} */
+    public function deleteCustomer($params): void
+    {
+        $this->loadCompany($params['slug'] ?? '');
+        require_once __DIR__ . '/../models/Customer.php';
+        $c = $this->authorizeCustomer($params['id'] ?? 0);
+        if ($c === null) return;
+
+        Customer::deleteById((int) $this->company['id'], (int) $c['id']);
+        $this->sendResponse(['message' => 'Cliente excluído', 'id' => (int) $c['id']]);
+    }
+
     /**
      * Lista pedidos da empresa
      */

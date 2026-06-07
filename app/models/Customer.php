@@ -88,6 +88,68 @@ class Customer
         return self::findById($id, $companyId);
     }
 
+    /**
+     * Lista clientes da empresa, com busca opcional por nome/telefone e paginação.
+     * Usado pela API mobile (GET /{slug}/customers).
+     */
+    public static function listByCompany(int $companyId, ?string $search = null, int $limit = 50, int $offset = 0): array
+    {
+        $sql = 'SELECT * FROM customers WHERE company_id = :cid';
+        $params = [':cid' => $companyId];
+
+        if ($search !== null && trim($search) !== '') {
+            $term = trim($search);
+            $digits = preg_replace('/\D+/', '', $term);
+            if ($digits !== '' && strlen($digits) >= 4) {
+                $sql .= ' AND (name LIKE :name OR whatsapp LIKE :phone OR whatsapp_e164 LIKE :phone)';
+                $params[':name'] = '%' . $term . '%';
+                $params[':phone'] = '%' . $digits . '%';
+            } else {
+                $sql .= ' AND name LIKE :name';
+                $params[':name'] = '%' . $term . '%';
+            }
+        }
+
+        $sql .= ' ORDER BY name ASC LIMIT :lim OFFSET :off';
+        $st = self::pdo()->prepare($sql);
+        foreach ($params as $k => $v) {
+            $st->bindValue($k, $v);
+        }
+        $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+        $st->bindValue(':off', $offset, PDO::PARAM_INT);
+        $st->execute();
+
+        return $st->fetchAll() ?: [];
+    }
+
+    public static function countByCompany(int $companyId, ?string $search = null): int
+    {
+        $sql = 'SELECT COUNT(*) FROM customers WHERE company_id = :cid';
+        $params = [':cid' => $companyId];
+        if ($search !== null && trim($search) !== '') {
+            $term = trim($search);
+            $digits = preg_replace('/\D+/', '', $term);
+            if ($digits !== '' && strlen($digits) >= 4) {
+                $sql .= ' AND (name LIKE :name OR whatsapp LIKE :phone OR whatsapp_e164 LIKE :phone)';
+                $params[':name'] = '%' . $term . '%';
+                $params[':phone'] = '%' . $digits . '%';
+            } else {
+                $sql .= ' AND name LIKE :name';
+                $params[':name'] = '%' . $term . '%';
+            }
+        }
+        $st = self::pdo()->prepare($sql);
+        $st->execute($params);
+
+        return (int) $st->fetchColumn();
+    }
+
+    public static function deleteById(int $companyId, int $id): void
+    {
+        $st = self::pdo()->prepare('DELETE FROM customers WHERE id = :id AND company_id = :cid');
+        $st->execute([':id' => $id, ':cid' => $companyId]);
+    }
+
     public static function insert(array $data): int
     {
         $sql = 'INSERT INTO customers (

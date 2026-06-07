@@ -47,8 +47,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Cache GHA removido: o export type=gha,mode=max estourava a cota de
+          # 10 GB do repositório e fazia o passo de push falhar. O build é
+          # self-contained (a imagem buildou limpa: 951 MB). Sem cache é um
+          # pouco mais lento, porém confiável.
 
       - name: Deploy notification
         run: |

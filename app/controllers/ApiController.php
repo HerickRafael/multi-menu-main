@@ -2065,18 +2065,27 @@ class ApiController extends Controller
         $status = $_GET['status'] ?? null;
         $dateFrom = $_GET['date_from'] ?? null;
         $dateTo = $_GET['date_to'] ?? null;
+        // Origem (manual/website/ifood) e busca por #, cliente ou telefone.
+        // O Order::listByCompany já suporta ambos; o app mobile passa via query.
+        $source = isset($_GET['source']) && trim((string) $_GET['source']) !== ''
+            ? trim((string) $_GET['source']) : null;
+        $search = isset($_GET['q']) && trim((string) $_GET['q']) !== ''
+            ? trim((string) $_GET['q']) : null;
         $limit = min((int)($_GET['limit'] ?? 50), 100); // Max 100 por request
         $offset = max((int)($_GET['offset'] ?? 0), 0);
 
+        $companyId = (int) $this->company['id'];
         $orders = Order::listByCompany(
             db(),
-            $this->company['id'],
+            $companyId,
             $status,
             $limit,
-            $offset
+            $offset,
+            $search,
+            $source
         );
 
-        $total = Order::countByCompany(db(), (int) $this->company['id'], $status);
+        $total = Order::countByCompany(db(), $companyId, $status, $search, $source);
 
         $this->sendResponse([
             'orders' => $orders,
@@ -2085,6 +2094,8 @@ class ApiController extends Controller
             'offset' => $offset,
             'filters' => [
                 'status' => $status,
+                'source' => $source,
+                'q' => $search,
                 'date_from' => $dateFrom,
                 'date_to' => $dateTo
             ]
